@@ -1,20 +1,31 @@
 
-import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LoginForm } from "@/components/auth/LoginForm";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { useLanguage } from "@/hooks/useLanguage";
-import { ShoppingCart, Calculator, Download, Globe } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { ShoppingCart, Calculator, Download, Globe, LogIn } from "lucide-react";
 
 const Index = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, loading } = useAuth();
   const { t } = useLanguage();
 
-  if (isAuthenticated) {
-    return <Dashboard onLogout={() => setIsAuthenticated(false)} />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+        <div className="text-center">
+          <Calculator className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-spin" />
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Dashboard />;
   }
 
   return (
@@ -26,7 +37,15 @@ const Index = () => {
             <Calculator className="h-8 w-8 text-blue-600" />
             <h1 className="text-2xl font-bold text-gray-900">MercadoValor</h1>
           </div>
-          <LanguageSelector />
+          <div className="flex items-center space-x-4">
+            <LanguageSelector />
+            <Button asChild>
+              <a href="/auth" className="flex items-center gap-2">
+                <LogIn className="h-4 w-4" />
+                Entrar
+              </a>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -104,9 +123,9 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Login Section */}
-        <div className="max-w-md mx-auto">
-          <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+        {/* CTA Section */}
+        <div className="text-center">
+          <Card className="max-w-md mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">{t('auth.welcome')}</CardTitle>
               <CardDescription>
@@ -114,7 +133,12 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LoginForm onLogin={() => setIsAuthenticated(true)} />
+              <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-lg py-6">
+                <a href="/auth" className="flex items-center justify-center gap-2">
+                  <LogIn className="h-5 w-5" />
+                  Começar Agora
+                </a>
+              </Button>
             </CardContent>
           </Card>
         </div>

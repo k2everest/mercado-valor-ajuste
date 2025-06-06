@@ -6,17 +6,19 @@ import { ProductsList } from "./ProductsList";
 import { MercadoLibreConnection } from "./MercadoLibreConnection";
 import { SettingsPanel } from "./SettingsPanel";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useAuth } from "@/hooks/useAuth";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
-import { Calculator, Settings, LogOut } from "lucide-react";
+import { Calculator, Settings, LogOut, User } from "lucide-react";
 
-interface DashboardProps {
-  onLogout: () => void;
-}
-
-export const Dashboard = ({ onLogout }: DashboardProps) => {
+export const Dashboard = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const { t } = useLanguage();
+  const { user, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -28,6 +30,10 @@ export const Dashboard = ({ onLogout }: DashboardProps) => {
             <h1 className="text-2xl font-bold text-gray-900">MercadoValor</h1>
           </div>
           <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <User className="h-4 w-4" />
+              <span>{user?.email}</span>
+            </div>
             <LanguageSelector />
             <Button
               variant="outline"
@@ -37,7 +43,7 @@ export const Dashboard = ({ onLogout }: DashboardProps) => {
               <Settings className="h-4 w-4 mr-2" />
               {t('dashboard.settings')}
             </Button>
-            <Button variant="outline" size="sm" onClick={onLogout}>
+            <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               {t('dashboard.logout')}
             </Button>
