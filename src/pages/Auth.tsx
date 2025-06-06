@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import { Calculator, Mail, Lock, User } from "lucide-react";
+import { Calculator, Mail, Lock, User, CheckCircle } from "lucide-react";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -15,6 +15,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
   const { user, signIn, signUp } = useAuth();
 
   // Redirect if already authenticated
@@ -30,7 +31,13 @@ const Auth = () => {
       if (isLogin) {
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
+          if (error.message.includes('Email not confirmed')) {
+            toast({
+              title: "Email não confirmado",
+              description: "Por favor, verifique seu email e clique no link de confirmação antes de fazer login.",
+              variant: "destructive"
+            });
+          } else if (error.message.includes('Invalid login credentials')) {
             toast({
               title: "Erro de Login",
               description: "Email ou senha incorretos. Verifique suas credenciais.",
@@ -66,11 +73,12 @@ const Auth = () => {
             });
           }
         } else {
+          setShowConfirmationMessage(true);
           toast({
             title: "Conta criada com sucesso!",
-            description: "Verifique seu email para confirmar a conta e fazer login."
+            description: "Verifique seu email para confirmar a conta.",
+            duration: 5000
           });
-          setIsLogin(true);
         }
       }
     } catch (error) {
@@ -83,6 +91,56 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  if (showConfirmationMessage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl text-green-700">Email de Confirmação Enviado!</CardTitle>
+            <CardDescription className="text-center">
+              Enviamos um email de confirmação para <strong>{email}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-semibold text-blue-800 mb-2">Próximos passos:</h4>
+              <ol className="text-sm text-blue-700 space-y-1">
+                <li>1. Verifique sua caixa de entrada</li>
+                <li>2. Clique no link de confirmação no email</li>
+                <li>3. Volte aqui e faça login</li>
+              </ol>
+            </div>
+            <p className="text-xs text-gray-500 text-center">
+              Não recebeu o email? Verifique sua pasta de spam ou lixo eletrônico.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowConfirmationMessage(false);
+                  setIsLogin(true);
+                }}
+              >
+                Já confirmei, fazer login
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowConfirmationMessage(false)}
+              >
+                Voltar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
