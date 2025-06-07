@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
-import { ShoppingCart, Shield, Zap } from "lucide-react";
+import { ShoppingCart, Shield, Zap, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface MercadoLibreConnectionProps {
@@ -19,18 +19,28 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
     setConnecting(true);
     
     try {
+      console.log('Iniciando conexão com Mercado Livre...');
+      
       // Generate a random state for security
       const state = Math.random().toString(36).substring(2, 15);
       localStorage.setItem('ml_oauth_state', state);
 
       // Get authorization URL from edge function
+      console.log('Solicitando URL de autorização...');
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
         body: { action: 'getAuthUrl', state }
       });
 
       if (authError) {
-        throw new Error(authError.message);
+        console.error('Erro ao obter URL de autorização:', authError);
+        throw new Error(`Erro na autorização: ${authError.message}`);
       }
+
+      if (!authData?.authUrl) {
+        throw new Error('URL de autorização não recebida');
+      }
+
+      console.log('URL de autorização recebida, abrindo janela...');
 
       // Open authorization window
       const authWindow = window.open(
@@ -39,17 +49,28 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         'width=500,height=600,scrollbars=yes,resizable=yes'
       );
 
+      if (!authWindow) {
+        throw new Error('Não foi possível abrir a janela de autorização. Verifique se o popup não foi bloqueado.');
+      }
+
       // Listen for the callback
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        console.log('Mensagem recebida:', event.data);
+        
+        if (event.origin !== window.location.origin) {
+          console.log('Origem inválida, ignorando mensagem');
+          return;
+        }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_SUCCESS') {
           const { code, state: returnedState } = event.data;
           
+          console.log('Autorização bem-sucedida, trocando código...');
+          
           // Verify state parameter
           const savedState = localStorage.getItem('ml_oauth_state');
           if (returnedState !== savedState) {
-            throw new Error('Invalid state parameter');
+            throw new Error('Parâmetro de estado inválido - possível ataque de segurança');
           }
 
           // Exchange code for access token
@@ -58,8 +79,11 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
           });
 
           if (tokenError) {
-            throw new Error(tokenError.message);
+            console.error('Erro na troca do código:', tokenError);
+            throw new Error(`Erro ao obter token: ${tokenError.message}`);
           }
+
+          console.log('Token obtido com sucesso, buscando produtos...');
 
           // Store access token securely
           localStorage.setItem('ml_access_token', tokenData.access_token);
@@ -70,21 +94,25 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
           });
 
           if (productsError) {
-            throw new Error(productsError.message);
+            console.error('Erro ao buscar produtos:', productsError);
+            throw new Error(`Erro ao buscar produtos: ${productsError.message}`);
           }
+
+          console.log('Produtos obtidos:', productsData.products?.length || 0);
 
           toast({
             title: "Conexão realizada com sucesso!",
-            description: `${productsData.products.length} produtos importados do Mercado Livre`,
+            description: `${productsData.products?.length || 0} produtos importados do Mercado Livre`,
           });
 
-          onConnect(productsData.products);
+          onConnect(productsData.products || []);
           authWindow?.close();
           window.removeEventListener('message', handleMessage);
           localStorage.removeItem('ml_oauth_state');
         }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_ERROR') {
+          console.error('Erro na autorização:', event.data.error);
           throw new Error(event.data.error || 'Falha na autenticação');
         }
       };
@@ -94,6 +122,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       // Check if window was closed manually
       const checkClosed = setInterval(() => {
         if (authWindow?.closed) {
+          console.log('Janela fechada pelo usuário');
           clearInterval(checkClosed);
           window.removeEventListener('message', handleMessage);
           setConnecting(false);
@@ -102,10 +131,10 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       }, 1000);
 
     } catch (error: any) {
-      console.error('Connection error:', error);
+      console.error('Erro na conexão:', error);
       toast({
         title: "Erro na conexão",
-        description: error.message || "Falha ao conectar com o Mercado Livre",
+        description: error.message || "Não foi possível conectar com o Mercado Livre",
         variant: "destructive"
       });
     } finally {
@@ -139,6 +168,13 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
               <div>
                 <h4 className="font-medium text-green-900">Importação Automática</h4>
                 <p className="text-sm text-green-700">Todos os seus produtos ativos serão importados</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-4 bg-orange-50 rounded-lg">
+              <AlertCircle className="h-6 w-6 text-orange-600" />
+              <div>
+                <h4 className="font-medium text-orange-900">Importante</h4>
+                <p className="text-sm text-orange-700">Permita pop-ups para completar a autenticação</p>
               </div>
             </div>
           </div>

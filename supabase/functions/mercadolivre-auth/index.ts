@@ -1,6 +1,5 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,14 +13,25 @@ serve(async (req) => {
 
   try {
     const { action, code, state } = await req.json()
+    console.log('Received request:', { action, hasCode: !!code, hasState: !!state })
     
     // Get environment variables
-    const ML_CLIENT_ID = Deno.env.get('ML_CLIENT_ID')!
-    const ML_CLIENT_SECRET = Deno.env.get('ML_CLIENT_SECRET')!
-    const REDIRECT_URI = `${new URL(req.url).origin}/auth/callback`
+    const ML_CLIENT_ID = Deno.env.get('ML_CLIENT_ID')
+    const ML_CLIENT_SECRET = Deno.env.get('ML_CLIENT_SECRET')
+    
+    if (!ML_CLIENT_ID || !ML_CLIENT_SECRET) {
+      console.error('Missing ML credentials')
+      throw new Error('Credenciais do Mercado Livre não configuradas')
+    }
+
+    console.log('Using Client ID:', ML_CLIENT_ID)
 
     if (action === 'getAuthUrl') {
+      const REDIRECT_URI = `${new URL(req.url).origin}/auth-callback.html`
+      console.log('Redirect URI:', REDIRECT_URI)
+      
       const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`
+      console.log('Generated auth URL:', authUrl)
       
       return new Response(
         JSON.stringify({ authUrl }),
@@ -30,6 +40,9 @@ serve(async (req) => {
     }
 
     if (action === 'exchangeCode') {
+      console.log('Exchanging code for token...')
+      const REDIRECT_URI = `${new URL(req.url).origin}/auth-callback.html`
+      
       // Exchange authorization code for access token
       const tokenResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
         method: 'POST',
@@ -45,11 +58,16 @@ serve(async (req) => {
         }),
       })
 
+      console.log('Token response status:', tokenResponse.status)
+      
       if (!tokenResponse.ok) {
-        throw new Error('Failed to exchange code for token')
+        const errorText = await tokenResponse.text()
+        console.error('Token exchange failed:', errorText)
+        throw new Error(`Falha na troca do código: ${errorText}`)
       }
 
       const tokenData = await tokenResponse.json()
+      console.log('Token exchange successful')
       
       return new Response(
         JSON.stringify(tokenData),
@@ -58,14 +76,14 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: 'Invalid action' }),
+      JSON.stringify({ error: 'Ação inválida' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in mercadolivre-auth:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Erro interno do servidor' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
