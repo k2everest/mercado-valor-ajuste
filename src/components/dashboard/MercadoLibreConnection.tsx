@@ -5,26 +5,112 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
 import { ShoppingCart, Shield, Zap } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface MercadoLibreConnectionProps {
-  onConnect: () => void;
+  onConnect: (products: any[]) => void;
 }
 
 export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProps) => {
   const [connecting, setConnecting] = useState(false);
   const { t } = useLanguage();
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     setConnecting(true);
-    // Simulate OAuth connection
-    setTimeout(() => {
-      setConnecting(false);
-      toast({
-        title: "Conexão realizada com sucesso!",
-        description: "Sua conta do Mercado Livre foi conectada",
+    
+    try {
+      // Generate a random state for security
+      const state = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('ml_oauth_state', state);
+
+      // Get authorization URL from edge function
+      const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
+        body: { action: 'getAuthUrl', state }
       });
-      onConnect();
-    }, 2000);
+
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      // Open authorization window
+      const authWindow = window.open(
+        authData.authUrl,
+        'mercadolivre-auth',
+        'width=500,height=600,scrollbars=yes,resizable=yes'
+      );
+
+      // Listen for the callback
+      const handleMessage = async (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+
+        if (event.data.type === 'MERCADOLIVRE_AUTH_SUCCESS') {
+          const { code, state: returnedState } = event.data;
+          
+          // Verify state parameter
+          const savedState = localStorage.getItem('ml_oauth_state');
+          if (returnedState !== savedState) {
+            throw new Error('Invalid state parameter');
+          }
+
+          // Exchange code for access token
+          const { data: tokenData, error: tokenError } = await supabase.functions.invoke('mercadolivre-auth', {
+            body: { action: 'exchangeCode', code }
+          });
+
+          if (tokenError) {
+            throw new Error(tokenError.message);
+          }
+
+          // Store access token securely
+          localStorage.setItem('ml_access_token', tokenData.access_token);
+          
+          // Fetch products
+          const { data: productsData, error: productsError } = await supabase.functions.invoke('mercadolivre-products', {
+            body: { accessToken: tokenData.access_token }
+          });
+
+          if (productsError) {
+            throw new Error(productsError.message);
+          }
+
+          toast({
+            title: "Conexão realizada com sucesso!",
+            description: `${productsData.products.length} produtos importados do Mercado Livre`,
+          });
+
+          onConnect(productsData.products);
+          authWindow?.close();
+          window.removeEventListener('message', handleMessage);
+          localStorage.removeItem('ml_oauth_state');
+        }
+
+        if (event.data.type === 'MERCADOLIVRE_AUTH_ERROR') {
+          throw new Error(event.data.error || 'Falha na autenticação');
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Check if window was closed manually
+      const checkClosed = setInterval(() => {
+        if (authWindow?.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', handleMessage);
+          setConnecting(false);
+          localStorage.removeItem('ml_oauth_state');
+        }
+      }, 1000);
+
+    } catch (error: any) {
+      console.error('Connection error:', error);
+      toast({
+        title: "Erro na conexão",
+        description: error.message || "Falha ao conectar com o Mercado Livre",
+        variant: "destructive"
+      });
+    } finally {
+      setConnecting(false);
+    }
   };
 
   return (
@@ -52,7 +138,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
               <Zap className="h-6 w-6 text-green-600" />
               <div>
                 <h4 className="font-medium text-green-900">Importação Automática</h4>
-                <p className="text-sm text-green-700">Todos os seus produtos serão importados instantaneamente</p>
+                <p className="text-sm text-green-700">Todos os seus produtos ativos serão importados</p>
               </div>
             </div>
           </div>

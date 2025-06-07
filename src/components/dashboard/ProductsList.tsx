@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
-import { Download, Minus, Plus, Package } from "lucide-react";
+import { Download, Minus, Plus, Package, ExternalLink } from "lucide-react";
 
 interface Product {
   id: string;
@@ -14,43 +14,19 @@ interface Product {
   status: 'active' | 'paused' | 'closed';
   freeShipping: boolean;
   adjustedPrice?: number;
+  permalink?: string;
+  thumbnail?: string;
+  availableQuantity?: number;
+  soldQuantity?: number;
 }
 
-// Mock data
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    title: 'iPhone 13 128GB - Azul',
-    originalPrice: 3299.99,
-    status: 'active',
-    freeShipping: true
-  },
-  {
-    id: '2',
-    title: 'Notebook Dell Inspiron 15 3000',
-    originalPrice: 2899.90,
-    status: 'active',
-    freeShipping: true
-  },
-  {
-    id: '3',
-    title: 'Smart TV Samsung 43" UHD 4K',
-    originalPrice: 1899.99,
-    status: 'paused',
-    freeShipping: false
-  },
-  {
-    id: '4',
-    title: 'Fone de Ouvido Sony WH-1000XM4',
-    originalPrice: 1299.99,
-    status: 'active',
-    freeShipping: true
-  }
-];
+interface ProductsListProps {
+  products: Product[];
+}
 
-export const ProductsList = () => {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
-  const [shippingCost] = useState(25.00); // Default shipping cost
+export const ProductsList = ({ products: initialProducts }: ProductsListProps) => {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [shippingCost] = useState(25.00);
   const { t } = useLanguage();
 
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
@@ -92,21 +68,24 @@ export const ProductsList = () => {
 
   const exportToCSV = () => {
     const csvContent = [
-      ['ID', 'Título', 'Preço Original', 'Preço Ajustado', 'Status', 'Frete Grátis'].join(','),
+      ['ID', 'Título', 'Preço Original', 'Preço Ajustado', 'Status', 'Frete Grátis', 'Quantidade Disponível', 'Vendidos', 'Link'].join(','),
       ...products.map(product => [
         product.id,
         `"${product.title}"`,
         product.originalPrice.toFixed(2),
         (product.adjustedPrice || product.originalPrice).toFixed(2),
         product.status,
-        product.freeShipping ? 'Sim' : 'Não'
+        product.freeShipping ? 'Sim' : 'Não',
+        product.availableQuantity || 0,
+        product.soldQuantity || 0,
+        product.permalink || ''
       ].join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'produtos_ajustados.csv';
+    link.download = 'produtos_mercadolivre_ajustados.csv';
     link.click();
 
     toast({
@@ -133,6 +112,20 @@ export const ProductsList = () => {
     }
   };
 
+  if (products.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum produto encontrado</h3>
+          <p className="text-gray-600">
+            Não foi possível encontrar produtos ativos em sua conta do Mercado Livre.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Action Buttons */}
@@ -140,7 +133,7 @@ export const ProductsList = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Ações em Massa
+            Ações em Massa ({products.length} produtos importados)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -179,32 +172,72 @@ export const ProductsList = () => {
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-2">{product.title}</h3>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Preço Original:</span>{' '}
-                      <span className="text-lg font-bold text-blue-600">
-                        R$ {product.originalPrice.toFixed(2)}
-                      </span>
-                    </div>
-                    {product.adjustedPrice && (
-                      <div className="text-sm text-gray-600">
-                        <span className="font-medium">Preço Ajustado:</span>{' '}
-                        <span className="text-lg font-bold text-green-600">
-                          R$ {product.adjustedPrice.toFixed(2)}
-                        </span>
+                  <div className="flex items-start gap-4">
+                    {product.thumbnail && (
+                      <img 
+                        src={product.thumbnail} 
+                        alt={product.title}
+                        className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-lg">{product.title}</h3>
+                        {product.permalink && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="p-1 h-auto"
+                          >
+                            <a 
+                              href={product.permalink} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              title="Ver anúncio no Mercado Livre"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-3">
-                    <Badge className={getStatusColor(product.status)}>
-                      {getStatusText(product.status)}
-                    </Badge>
-                    {product.freeShipping && (
-                      <Badge variant="secondary">
-                        ✅ Frete Grátis
-                      </Badge>
-                    )}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="text-sm text-gray-600">
+                          <span className="font-medium">Preço Original:</span>{' '}
+                          <span className="text-lg font-bold text-blue-600">
+                            R$ {product.originalPrice.toFixed(2)}
+                          </span>
+                        </div>
+                        {product.adjustedPrice && (
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Preço Ajustado:</span>{' '}
+                            <span className="text-lg font-bold text-green-600">
+                              R$ {product.adjustedPrice.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-3">
+                        <Badge className={getStatusColor(product.status)}>
+                          {getStatusText(product.status)}
+                        </Badge>
+                        {product.freeShipping && (
+                          <Badge variant="secondary">
+                            ✅ Frete Grátis
+                          </Badge>
+                        )}
+                        {product.availableQuantity !== undefined && (
+                          <Badge variant="outline">
+                            Disponível: {product.availableQuantity}
+                          </Badge>
+                        )}
+                        {product.soldQuantity !== undefined && product.soldQuantity > 0 && (
+                          <Badge variant="outline">
+                            Vendidos: {product.soldQuantity}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

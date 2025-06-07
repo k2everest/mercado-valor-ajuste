@@ -12,12 +12,18 @@ import { Calculator, Settings, LogOut, User } from "lucide-react";
 
 export const Dashboard = () => {
   const [isConnected, setIsConnected] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
+  };
+
+  const handleConnection = (importedProducts: any[]) => {
+    setProducts(importedProducts);
+    setIsConnected(true);
   };
 
   return (
@@ -66,9 +72,9 @@ export const Dashboard = () => {
         )}
 
         {!isConnected ? (
-          <MercadoLibreConnection onConnect={() => setIsConnected(true)} />
+          <MercadoLibreConnection onConnect={handleConnection} />
         ) : (
-          <ProductsList />
+          <ProductsList products={products} />
         )}
       </div>
     </div>
