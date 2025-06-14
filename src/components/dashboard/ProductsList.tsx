@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        const adjustment = operation === 'add' ? shippingCost : -shippingCost;
+        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
           adjustedPrice: product.originalPrice + adjustment
@@ -54,7 +56,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustAllPrices = (operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.freeShipping) {
-        const adjustment = operation === 'add' ? shippingCost : -shippingCost;
+        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
           adjustedPrice: product.originalPrice + adjustment
@@ -131,12 +134,17 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     try {
       console.log('Buscando custos de frete para produto:', productId);
       
-      const { data, error } = await supabase.functions.invoke('magento-freight', {
+      const accessToken = localStorage.getItem('ml_access_token');
+      if (!accessToken) {
+        throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
+      }
+
+      const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
           action: 'getShippingCosts',
           productId,
           zipCode: zipCode.replace(/\D/g, ''), // Remove caracteres não numéricos
-          quantity: 1
+          accessToken
         }
       });
 
@@ -173,7 +181,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
       console.error('Erro ao calcular frete:', error);
       toast({
         title: "Erro ao calcular frete",
-        description: error.message || "Não foi possível calcular o frete via Magento",
+        description: error.message || "Não foi possível calcular o frete via Mercado Livre",
         variant: "destructive"
       });
     } finally {
@@ -221,7 +229,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5" />
-            Calculadora de Frete Magento
+            Calculadora de Frete Mercado Livre
           </CardTitle>
         </CardHeader>
         <CardContent>
