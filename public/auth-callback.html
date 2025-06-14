@@ -1,15 +1,17 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-    <title>Autenticação Mercado Livre</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autenticação Mercado Livre - MercadoValor</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -23,8 +25,8 @@
         }
         .spinner {
             border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
             border-radius: 50%;
-            border-top: 4px solid white;
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
@@ -34,47 +36,69 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .error {
+            color: #ff6b6b;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="spinner"></div>
         <h2>Processando autenticação...</h2>
-        <p>Você será redirecionado em instantes.</p>
+        <p>Aguarde enquanto processamos sua conexão com o Mercado Livre.</p>
+        <div id="error" class="error" style="display: none;"></div>
     </div>
 
     <script>
-        // Get URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const state = urlParams.get('state');
-        const error = urlParams.get('error');
+        (function() {
+            try {
+                console.log('Auth callback iniciado');
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const state = urlParams.get('state');
+                const error = urlParams.get('error');
 
-        if (error) {
-            // Send error to parent window
-            window.opener?.postMessage({
-                type: 'MERCADOLIVRE_AUTH_ERROR',
-                error: error
-            }, window.location.origin);
-        } else if (code && state) {
-            // Send success to parent window
-            window.opener?.postMessage({
-                type: 'MERCADOLIVRE_AUTH_SUCCESS',
-                code: code,
-                state: state
-            }, window.location.origin);
-        } else {
-            // Send error if no code received
-            window.opener?.postMessage({
-                type: 'MERCADOLIVRE_AUTH_ERROR',
-                error: 'Nenhum código de autorização recebido'
-            }, window.location.origin);
-        }
+                if (error) {
+                    console.error('Erro OAuth:', error);
+                    document.getElementById('error').textContent = 'Erro na autenticação: ' + error;
+                    document.getElementById('error').style.display = 'block';
+                    
+                    window.opener?.postMessage({
+                        type: 'MERCADOLIVRE_AUTH_ERROR',
+                        error: error
+                    }, window.location.origin);
+                    return;
+                }
 
-        // Close window after sending message
-        setTimeout(() => {
-            window.close();
-        }, 1000);
+                if (code) {
+                    console.log('Código de autorização recebido, enviando para janela pai...');
+                    
+                    // Enviar dados para a janela pai
+                    window.opener?.postMessage({
+                        type: 'MERCADOLIVRE_AUTH_SUCCESS',
+                        code: code,
+                        state: state
+                    }, window.location.origin);
+                    
+                    // Fechar a janela após 2 segundos
+                    setTimeout(() => {
+                        window.close();
+                    }, 2000);
+                } else {
+                    throw new Error('Código de autorização não encontrado');
+                }
+            } catch (err) {
+                console.error('Erro no callback:', err);
+                document.getElementById('error').textContent = 'Erro: ' + err.message;
+                document.getElementById('error').style.display = 'block';
+                
+                window.opener?.postMessage({
+                    type: 'MERCADOLIVRE_AUTH_ERROR',
+                    error: err.message
+                }, window.location.origin);
+            }
+        })();
     </script>
 </body>
 </html>

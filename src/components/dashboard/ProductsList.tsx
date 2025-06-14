@@ -1,11 +1,12 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
-import { Download, Minus, Plus, Package, ExternalLink } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Download, Minus, Plus, Package, ExternalLink, Truck, Calculator } from "lucide-react";
 
 interface Product {
   id: string;
@@ -18,6 +19,8 @@ interface Product {
   thumbnail?: string;
   availableQuantity?: number;
   soldQuantity?: number;
+  freightCost?: number;
+  freightMethod?: string;
 }
 
 interface ProductsListProps {
@@ -26,7 +29,8 @@ interface ProductsListProps {
 
 export const ProductsList = ({ products: initialProducts }: ProductsListProps) => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [shippingCost] = useState(25.00);
+  const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
+  const [zipCode, setZipCode] = useState('');
   const { t } = useLanguage();
 
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
@@ -112,6 +116,90 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     }
   };
 
+  const fetchFreightCosts = async (productId: string) => {
+    if (!zipCode) {
+      toast({
+        title: "CEP necessário",
+        description: "Digite um CEP para calcular o frete",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLoadingFreight(prev => ({ ...prev, [productId]: true }));
+
+    try {
+      console.log('Buscando custos de frete para produto:', productId);
+      
+      const { data, error } = await supabase.functions.invoke('magento-freight', {
+        body: { 
+          action: 'getShippingCosts',
+          productId,
+          zipCode: zipCode.replace(/\D/g, ''), // Remove caracteres não numéricos
+          quantity: 1
+        }
+      });
+
+      if (error) {
+        console.error('Erro ao buscar frete:', error);
+        throw new Error(error.message);
+      }
+
+      console.log('Opções de frete recebidas:', data.freightOptions);
+
+      // Encontrar a opção de frete mais barata
+      const cheapestFreight = data.freightOptions.reduce((min: any, current: any) => 
+        current.price < min.price ? current : min
+      );
+
+      // Atualizar o produto com o valor do frete
+      setProducts(prev => prev.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            freightCost: cheapestFreight.price,
+            freightMethod: cheapestFreight.method
+          };
+        }
+        return product;
+      }));
+
+      toast({
+        title: "Frete calculado!",
+        description: `${cheapestFreight.method}: R$ ${cheapestFreight.price.toFixed(2)}`,
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao calcular frete:', error);
+      toast({
+        title: "Erro ao calcular frete",
+        description: error.message || "Não foi possível calcular o frete via Magento",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingFreight(prev => ({ ...prev, [productId]: false }));
+    }
+  };
+
+  const adjustPriceWithFreight = (productId: string, operation: 'add' | 'subtract') => {
+    setProducts(prev => prev.map(product => {
+      if (product.id === productId) {
+        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        const adjustment = operation === 'add' ? freightCost : -freightCost;
+        return {
+          ...product,
+          adjustedPrice: product.originalPrice + adjustment
+        };
+      }
+      return product;
+    }));
+
+    toast({
+      title: "Preço ajustado com frete!",
+      description: `Frete ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
+    });
+  };
+
   if (products.length === 0) {
     return (
       <Card>
@@ -128,6 +216,46 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
   return (
     <div className="space-y-6">
+      {/* Freight Calculator */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            Calculadora de Frete Magento
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 items-end">
+            <div className="flex-1">
+              <label htmlFor="zipcode" className="block text-sm font-medium mb-2">
+                CEP de Destino
+              </label>
+              <Input
+                id="zipcode"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                placeholder="Digite o CEP (ex: 01310-100)"
+                maxLength={9}
+              />
+            </div>
+            <Button
+              onClick={() => {
+                products.forEach(product => {
+                  if (!loadingFreight[product.id]) {
+                    fetchFreightCosts(product.id);
+                  }
+                });
+              }}
+              disabled={Object.values(loadingFreight).some(Boolean)}
+              className="flex items-center gap-2"
+            >
+              <Truck className="h-4 w-4" />
+              {Object.values(loadingFreight).some(Boolean) ? 'Calculando...' : 'Calcular Frete'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Action Buttons */}
       <Card>
         <CardHeader>
@@ -208,6 +336,14 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                             R$ {product.originalPrice.toFixed(2)}
                           </span>
                         </div>
+                        {product.freightCost && (
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Frete ({product.freightMethod}):</span>{' '}
+                            <span className="text-lg font-bold text-orange-600">
+                              R$ {product.freightCost.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                         {product.adjustedPrice && (
                           <div className="text-sm text-gray-600">
                             <span className="font-medium">Preço Ajustado:</span>{' '}
@@ -241,28 +377,41 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                   </div>
                 </div>
 
-                {product.freeShipping && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => adjustPrice(product.id, 'subtract')}
-                      className="flex items-center gap-1"
-                    >
-                      <Minus className="h-4 w-4" />
-                      Subtrair Frete
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => adjustPrice(product.id, 'add')}
-                      className="flex items-center gap-1"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Somar Frete
-                    </Button>
-                  </div>
-                )}
+                <div className="flex flex-col gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fetchFreightCosts(product.id)}
+                    disabled={loadingFreight[product.id] || !zipCode}
+                    className="flex items-center gap-1"
+                  >
+                    <Truck className="h-4 w-4" />
+                    {loadingFreight[product.id] ? 'Calculando...' : 'Calcular Frete'}
+                  </Button>
+                  
+                  {product.freightCost && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => adjustPriceWithFreight(product.id, 'subtract')}
+                        className="flex items-center gap-1"
+                      >
+                        <Minus className="h-4 w-4" />
+                        Subtrair Frete
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => adjustPriceWithFreight(product.id, 'add')}
+                        className="flex items-center gap-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Somar Frete
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
