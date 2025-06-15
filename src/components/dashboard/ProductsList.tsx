@@ -151,12 +151,16 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
     try {
-      console.log('Buscando custos de frete para produto:', productId);
+      console.log('=== INICIANDO CÁLCULO DE FRETE ===');
+      console.log('Produto ID:', productId);
+      console.log('CEP:', zipCode);
       
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
+
+      console.log('Token encontrado, chamando edge function...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
@@ -168,41 +172,65 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
       });
 
       if (error) {
-        console.error('Erro ao buscar frete:', error);
+        console.error('Erro da edge function:', error);
         throw new Error(error.message);
       }
 
-      console.log('Opções de frete recebidas:', data.freightOptions);
+      console.log('=== RESPOSTA COMPLETA DA API ===');
+      console.log('Data completa:', JSON.stringify(data, null, 2));
+      console.log('Opções de frete:', data.freightOptions);
+
+      if (!data.freightOptions || data.freightOptions.length === 0) {
+        throw new Error('Nenhuma opção de frete retornada pela API');
+      }
 
       // Find the cheapest option and prioritize seller cost for free shipping
-      const cheapestFreight = data.freightOptions.reduce((min: any, current: any) => 
-        current.sellerCost < min.sellerCost ? current : min
-      );
+      const cheapestFreight = data.freightOptions.reduce((min: any, current: any) => {
+        console.log('Comparando opções:', {
+          current: { method: current.method, sellerCost: current.sellerCost, price: current.price },
+          min: { method: min.method, sellerCost: min.sellerCost, price: min.price }
+        });
+        return current.sellerCost < min.sellerCost ? current : min;
+      });
+
+      console.log('=== OPÇÃO MAIS BARATA SELECIONADA ===');
+      console.log('Método:', cheapestFreight.method);
+      console.log('Preço para cliente:', cheapestFreight.price);
+      console.log('Custo real do vendedor:', cheapestFreight.sellerCost);
+      console.log('Fonte dos dados:', cheapestFreight.source);
 
       // Update product with both customer and seller costs
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
-          return {
+          const updatedProduct = {
             ...product,
             freightCost: cheapestFreight.price,
             sellerFreightCost: cheapestFreight.sellerCost,
             freightMethod: cheapestFreight.method
           };
+          console.log('Produto atualizado:', updatedProduct);
+          return updatedProduct;
         }
         return product;
       }));
 
       const costMessage = cheapestFreight.isFreeShipping 
         ? `${cheapestFreight.method}: Cliente R$ 0,00 | Vendedor R$ ${cheapestFreight.sellerCost.toFixed(2)}`
-        : `${cheapestFreight.method}: R$ ${cheapestFreight.price.toFixed(2)}`;
+        : `${cheapestFreight.method}: Cliente R$ ${cheapestFreight.price.toFixed(2)} | Vendedor R$ ${cheapestFreight.sellerCost.toFixed(2)}`;
 
       toast({
-        title: "Frete calculado!",
+        title: "Frete calculado com sucesso!",
         description: costMessage,
       });
 
+      console.log('=== CÁLCULO FINALIZADO ===');
+
     } catch (error: any) {
-      console.error('Erro ao calcular frete:', error);
+      console.error('=== ERRO NO CÁLCULO DE FRETE ===');
+      console.error('Erro completo:', error);
+      console.error('Message:', error.message);
+      console.error('Stack:', error.stack);
+      
       toast({
         title: "Erro ao calcular frete",
         description: error.message || "Não foi possível calcular o frete via Mercado Livre",
