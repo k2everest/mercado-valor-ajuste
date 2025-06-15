@@ -1,3 +1,4 @@
+
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -28,17 +29,21 @@ export class FreightCalculator {
       
       console.log('É Mercado Envios Padrão?', isMercadoEnviosPadrao);
       
-      // Determine who pays for shipping
+      // CORREÇÃO: Determine who pays for shipping de forma mais rigorosa
       const productHasFreeShipping = product.shipping?.free_shipping === true;
       const optionHasFreeShipping = option.cost === 0;
       
+      // VALIDAÇÃO ADICIONAL: Se o produto não tem frete grátis E a opção tem custo > 0, 
+      // então definitivamente é pago pelo comprador
+      const isReallyFreeShipping = productHasFreeShipping && optionHasFreeShipping;
+      
       console.log('Produto tem frete grátis:', productHasFreeShipping);
       console.log('Opção tem custo zero:', optionHasFreeShipping);
+      console.log('É realmente frete grátis?', isReallyFreeShipping);
       
       const costCalculation = this.calculateRealCost(
         option, 
-        productHasFreeShipping, 
-        optionHasFreeShipping
+        isReallyFreeShipping
       );
       
       return {
@@ -48,7 +53,7 @@ export class FreightCalculator {
         sellerCost: costCalculation.sellerCost,
         buyerCost: costCalculation.buyerCost,
         deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
-        isFreeShipping: productHasFreeShipping || optionHasFreeShipping,
+        isFreeShipping: isReallyFreeShipping,
         paidBy: costCalculation.paidBy,
         source: 'direct_api_detailed',
         rawData: option,
@@ -61,15 +66,14 @@ export class FreightCalculator {
 
   private static calculateRealCost(
     option: ShippingOption,
-    productHasFreeShipping: boolean,
-    optionHasFreeShipping: boolean
+    isReallyFreeShipping: boolean
   ): { sellerCost: number; buyerCost: number; calculationMethod: string; paidBy: string } {
     let sellerCost = 0;
     let buyerCost = 0;
     let calculationMethod = '';
     let paidBy = '';
     
-    if (productHasFreeShipping || optionHasFreeShipping) {
+    if (isReallyFreeShipping) {
       // FRETE GRÁTIS - Vendedor paga
       paidBy = 'vendedor';
       buyerCost = 0;
