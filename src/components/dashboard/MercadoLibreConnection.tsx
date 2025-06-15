@@ -73,47 +73,67 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
             throw new Error('Parâmetro de estado inválido - possível ataque de segurança');
           }
 
-          // Exchange code for access token
-          const { data: tokenData, error: tokenError } = await supabase.functions.invoke('mercadolivre-auth', {
-            body: { action: 'exchangeCode', code }
-          });
+          try {
+            // Exchange code for access token
+            const { data: tokenData, error: tokenError } = await supabase.functions.invoke('mercadolivre-auth', {
+              body: { action: 'exchangeCode', code }
+            });
 
-          if (tokenError) {
-            console.error('Erro na troca do código:', tokenError);
-            throw new Error(`Erro ao obter token: ${tokenError.message}`);
+            if (tokenError) {
+              console.error('Erro na troca do código:', tokenError);
+              throw new Error(`Erro ao obter token: ${tokenError.message}`);
+            }
+
+            console.log('Token obtido com sucesso, buscando produtos...');
+
+            // Store access token securely
+            localStorage.setItem('ml_access_token', tokenData.access_token);
+            
+            // Fetch products
+            const { data: productsData, error: productsError } = await supabase.functions.invoke('mercadolivre-products', {
+              body: { accessToken: tokenData.access_token }
+            });
+
+            if (productsError) {
+              console.error('Erro ao buscar produtos:', productsError);
+              throw new Error(`Erro ao buscar produtos: ${productsError.message}`);
+            }
+
+            console.log('Produtos obtidos:', productsData.products?.length || 0);
+
+            toast({
+              title: "Conexão realizada com sucesso!",
+              description: `${productsData.products?.length || 0} produtos importados do Mercado Livre`,
+            });
+
+            onConnect(productsData.products || []);
+            
+          } catch (error: any) {
+            console.error('Erro no processamento:', error);
+            toast({
+              title: "Erro na conexão",
+              description: error.message || "Erro ao processar autenticação",
+              variant: "destructive"
+            });
+          } finally {
+            authWindow?.close();
+            window.removeEventListener('message', handleMessage);
+            localStorage.removeItem('ml_oauth_state');
+            setConnecting(false);
           }
-
-          console.log('Token obtido com sucesso, buscando produtos...');
-
-          // Store access token securely
-          localStorage.setItem('ml_access_token', tokenData.access_token);
-          
-          // Fetch products
-          const { data: productsData, error: productsError } = await supabase.functions.invoke('mercadolivre-products', {
-            body: { accessToken: tokenData.access_token }
-          });
-
-          if (productsError) {
-            console.error('Erro ao buscar produtos:', productsError);
-            throw new Error(`Erro ao buscar produtos: ${productsError.message}`);
-          }
-
-          console.log('Produtos obtidos:', productsData.products?.length || 0);
-
-          toast({
-            title: "Conexão realizada com sucesso!",
-            description: `${productsData.products?.length || 0} produtos importados do Mercado Livre`,
-          });
-
-          onConnect(productsData.products || []);
-          authWindow?.close();
-          window.removeEventListener('message', handleMessage);
-          localStorage.removeItem('ml_oauth_state');
         }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_ERROR') {
           console.error('Erro na autorização:', event.data.error);
-          throw new Error(event.data.error || 'Falha na autenticação');
+          toast({
+            title: "Erro na conexão",
+            description: event.data.error || 'Falha na autenticação',
+            variant: "destructive"
+          });
+          authWindow?.close();
+          window.removeEventListener('message', handleMessage);
+          localStorage.removeItem('ml_oauth_state');
+          setConnecting(false);
         }
       };
 
@@ -125,8 +145,8 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
           console.log('Janela fechada pelo usuário');
           clearInterval(checkClosed);
           window.removeEventListener('message', handleMessage);
-          setConnecting(false);
           localStorage.removeItem('ml_oauth_state');
+          setConnecting(false);
         }
       }, 1000);
 
@@ -137,7 +157,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         description: error.message || "Não foi possível conectar com o Mercado Livre",
         variant: "destructive"
       });
-    } finally {
       setConnecting(false);
     }
   };

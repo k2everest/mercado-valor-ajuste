@@ -17,6 +17,11 @@ const AuthCallback = () => {
           type: 'MERCADOLIVRE_AUTH_ERROR',
           error: error
         }, window.location.origin);
+        
+        // Close window after sending error
+        setTimeout(() => {
+          window.close();
+        }, 1000);
         return;
       }
 
@@ -30,10 +35,10 @@ const AuthCallback = () => {
           state: state
         }, window.location.origin);
         
-        // Close window after 2 seconds
+        // Close window after 1 second
         setTimeout(() => {
           window.close();
-        }, 2000);
+        }, 1000);
       } else {
         throw new Error('Código de autorização não encontrado');
       }
@@ -44,6 +49,11 @@ const AuthCallback = () => {
         type: 'MERCADOLIVRE_AUTH_ERROR',
         error: err.message
       }, window.location.origin);
+      
+      // Close window after sending error
+      setTimeout(() => {
+        window.close();
+      }, 1000);
     }
   }, []);
 
@@ -53,6 +63,7 @@ const AuthCallback = () => {
         <div className="animate-spin w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto mb-4"></div>
         <h2 className="text-xl font-semibold text-gray-800 mb-2">Processando autenticação...</h2>
         <p className="text-gray-600">Aguarde enquanto processamos sua conexão com o Mercado Livre.</p>
+        <p className="text-sm text-gray-500 mt-4">Esta janela será fechada automaticamente.</p>
       </div>
     </div>
   );
