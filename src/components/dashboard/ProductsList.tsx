@@ -51,6 +51,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     hasOnLoadMore: !!onLoadMore
   });
 
+  // Check if we're actually receiving the pagination props correctly
+  console.log('ProductsList props received:', {
+    initialProductsCount: initialProducts.length,
+    pagination: pagination,
+    onLoadMoreFunction: typeof onLoadMore,
+    hasOnLoadMore: !!onLoadMore
+  });
+
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
       console.log('Cannot load more - missing pagination or onLoadMore');
@@ -421,19 +429,21 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   return (
     <div className="space-y-6">
-      {/* Debug Info */}
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h4 className="font-semibold text-blue-800 mb-2">Debug Info:</h4>
-        <div className="text-sm text-blue-700 space-y-1">
-          <p>Products loaded: {products.length}</p>
-          <p>Pagination: {pagination ? JSON.stringify(pagination) : 'Not available'}</p>
-          <p>Has onLoadMore: {onLoadMore ? 'Yes' : 'No'}</p>
-          <p>Loading more: {loadingMore ? 'Yes' : 'No'}</p>
+      {/* Debug Info - Make it more prominent */}
+      <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+        <h4 className="font-semibold text-yellow-800 mb-2">🐛 Debug Info:</h4>
+        <div className="text-sm text-yellow-700 space-y-1">
+          <p><strong>Products loaded:</strong> {products.length}</p>
+          <p><strong>Initial products:</strong> {initialProducts.length}</p>
+          <p><strong>Pagination object:</strong> {pagination ? JSON.stringify(pagination, null, 2) : 'Not available'}</p>
+          <p><strong>Has onLoadMore function:</strong> {onLoadMore ? 'Yes' : 'No'}</p>
+          <p><strong>Loading more:</strong> {loadingMore ? 'Yes' : 'No'}</p>
+          <p><strong>Should show pagination:</strong> {pagination && onLoadMore ? 'Yes' : 'No'}</p>
         </div>
       </div>
 
-      {/* Pagination Controls */}
-      {pagination && onLoadMore && (
+      {/* Pagination Controls - Add fallback debug */}
+      {pagination && onLoadMore ? (
         <ProductsPagination
           pagination={pagination}
           onLoadMore={loadMoreProducts}
@@ -441,6 +451,15 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           loading={loadingMore}
           currentProductsCount={products.length}
         />
+      ) : (
+        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+          <h4 className="font-semibold text-red-800 mb-2">⚠️ Pagination Not Available</h4>
+          <div className="text-sm text-red-700 space-y-1">
+            <p>Pagination: {pagination ? 'Available' : 'Missing'}</p>
+            <p>onLoadMore: {onLoadMore ? 'Available' : 'Missing'}</p>
+            <p>This means the parent component is not passing the required props.</p>
+          </div>
+        </div>
       )}
 
       {/* Freight Calculator */}

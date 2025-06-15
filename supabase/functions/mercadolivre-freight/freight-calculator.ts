@@ -1,4 +1,3 @@
-
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -78,11 +77,10 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0;
       
-      // CÁLCULO MELHORADO: Considera desconto por reputação de forma consistente
-      
+      // CORREÇÃO PARA DESCONTO POR REPUTAÇÃO
       // Se existe desconto por reputação (loyal discount), usar o base_cost
       if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
-        // Para descontos por reputação, o vendedor paga o base_cost (valor original)
+        // Para descontos por reputação, o vendedor paga o base_cost (valor original antes do desconto)
         if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
           sellerCost = option.base_cost;
           calculationMethod = 'base_cost_com_desconto_reputacao';
