@@ -12,13 +12,13 @@ serve(async (req) => {
   }
 
   try {
-    const { accessToken } = await req.json()
+    const { accessToken, limit = 20, offset = 0 } = await req.json()
 
     if (!accessToken) {
       throw new Error('Access token is required')
     }
 
-    console.log('Fetching user information...')
+    console.log(`Fetching user information... (limit: ${limit}, offset: ${offset})`)
 
     // Get user information first
     const userResponse = await fetch('https://api.mercadolibre.com/users/me', {
@@ -37,9 +37,9 @@ serve(async (req) => {
     const userId = userData.id
     console.log('User ID:', userId)
 
-    // Get user's items
+    // Get user's items with pagination
     console.log('Fetching user items...')
-    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=50`, {
+    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=50&offset=${offset}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
@@ -53,21 +53,31 @@ serve(async (req) => {
 
     const itemsData = await itemsResponse.json()
     const itemIds = itemsData.results
-    console.log('Found items:', itemIds.length)
+    const totalItems = itemsData.paging?.total || itemIds.length
+    console.log('Found items:', itemIds.length, 'Total items:', totalItems)
 
     if (itemIds.length === 0) {
       console.log('No active items found')
       return new Response(
-        JSON.stringify({ products: [] }),
+        JSON.stringify({ 
+          products: [], 
+          pagination: {
+            total: totalItems,
+            offset,
+            limit,
+            hasMore: false
+          }
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get detailed information for each item individually to avoid batch request issues
+    // Get detailed information for each item individually
     console.log('Fetching item details...')
     const products = []
+    const itemsToProcess = limit === -1 ? itemIds : itemIds.slice(0, limit)
     
-    for (const itemId of itemIds.slice(0, 20)) { // Limit to 20 items to avoid timeouts
+    for (const itemId of itemsToProcess) {
       try {
         const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
           headers: {
@@ -98,8 +108,18 @@ serve(async (req) => {
 
     console.log('Successfully processed products:', products.length)
 
+    const hasMore = limit !== -1 && (offset + products.length) < totalItems
+
     return new Response(
-      JSON.stringify({ products }),
+      JSON.stringify({ 
+        products,
+        pagination: {
+          total: totalItems,
+          offset,
+          limit,
+          hasMore
+        }
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

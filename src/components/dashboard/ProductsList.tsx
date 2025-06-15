@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { ProductsPagination } from "./ProductsPagination";
 import { Download, Minus, Plus, Package, ExternalLink, Truck, Calculator } from "lucide-react";
 
 interface Product {
@@ -24,15 +25,104 @@ interface Product {
   freightMethod?: string;
 }
 
-interface ProductsListProps {
-  products: Product[];
+interface PaginationInfo {
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
 }
 
-export const ProductsList = ({ products: initialProducts }: ProductsListProps) => {
+interface ProductsListProps {
+  products: Product[];
+  pagination?: PaginationInfo;
+  onLoadMore?: (products: Product[], newPagination: PaginationInfo) => void;
+}
+
+export const ProductsList = ({ products: initialProducts, pagination, onLoadMore }: ProductsListProps) => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
+  const [loadingMore, setLoadingMore] = useState(false);
   const [zipCode, setZipCode] = useState('');
   const { t } = useLanguage();
+
+  const loadMoreProducts = async (limit: number) => {
+    if (!pagination || !onLoadMore) return;
+    
+    setLoadingMore(true);
+    try {
+      const accessToken = localStorage.getItem('ml_access_token');
+      if (!accessToken) {
+        throw new Error('Token de acesso não encontrado');
+      }
+
+      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
+        body: { 
+          accessToken,
+          limit,
+          offset: products.length
+        }
+      });
+
+      if (error) throw error;
+
+      const newProducts = [...products, ...data.products];
+      setProducts(newProducts);
+      onLoadMore(newProducts, data.pagination);
+
+      toast({
+        title: "✅ Produtos carregados!",
+        description: `${data.products.length} novos produtos foram adicionados`,
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao carregar produtos",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const loadAllProducts = async () => {
+    if (!pagination || !onLoadMore) return;
+    
+    setLoadingMore(true);
+    try {
+      const accessToken = localStorage.getItem('ml_access_token');
+      if (!accessToken) {
+        throw new Error('Token de acesso não encontrado');
+      }
+
+      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
+        body: { 
+          accessToken,
+          limit: -1, // Load all
+          offset: 0
+        }
+      });
+
+      if (error) throw error;
+
+      setProducts(data.products);
+      onLoadMore(data.products, data.pagination);
+
+      toast({
+        title: "✅ Todos os produtos carregados!",
+        description: `Total de ${data.products.length} produtos importados`,
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao carregar todos os produtos",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
@@ -314,6 +404,17 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
   return (
     <div className="space-y-6">
+      {/* Pagination Controls */}
+      {pagination && (
+        <ProductsPagination
+          pagination={pagination}
+          onLoadMore={loadMoreProducts}
+          onLoadAll={loadAllProducts}
+          loading={loadingMore}
+          currentProductsCount={products.length}
+        />
+      )}
+
       {/* Freight Calculator */}
       <Card>
         <CardHeader>
