@@ -37,7 +37,6 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        // Only use seller's actual freight cost if available
         const freightCost = product.sellerFreightCost;
         if (!freightCost) {
           toast({
@@ -151,16 +150,13 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
     try {
-      console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL 🚚');
-      console.log('📦 Produto ID:', productId);
+      console.log('🚚 CALCULANDO FRETE REAL - PRODUTO:', productId);
       console.log('📍 CEP:', zipCode);
       
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
-
-      console.log('🔑 Token encontrado, chamando API...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
@@ -172,116 +168,78 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
       });
 
       if (error) {
-        console.error('❌ Erro da API:', error);
+        console.error('❌ ERRO DA API:', error);
         throw new Error(error.message);
       }
 
-      console.log('📨 RESPOSTA COMPLETA DA API:');
-      console.log('Data completa:', JSON.stringify(data, null, 2));
+      console.log('📦 RESPOSTA COMPLETA DA API:', data);
       
-      if (!data.freightOptions || data.freightOptions.length === 0) {
-        throw new Error('Nenhuma opção de frete real retornada pela API do Mercado Livre');
+      if (!data?.freightOptions || data.freightOptions.length === 0) {
+        throw new Error('Nenhuma opção de frete retornada pela API do Mercado Livre');
       }
 
-      // Log cada opção individualmente
-      console.log('📋 OPÇÕES DE FRETE RECEBIDAS:');
+      console.log('🔍 OPÇÕES DE FRETE RECEBIDAS:');
       data.freightOptions.forEach((option: any, index: number) => {
         console.log(`Opção ${index + 1}:`, {
           método: option.method,
           preçoCliente: option.price,
           custoVendedor: option.sellerCost,
-          fonte: option.source,
-          dadosCompletos: option.rawData
+          fonte: option.source
         });
       });
 
-      // Find the cheapest option based on seller cost
-      const cheapestFreight = data.freightOptions.reduce((min: any, current: any) => {
-        console.log('🔍 Comparando custos do vendedor:', {
-          atual: { método: current.method, custoVendedor: current.sellerCost },
-          mínimo: { método: min.method, custoVendedor: min.sellerCost }
-        });
+      // Buscar a opção mais barata baseada no custo do vendedor
+      const cheapestOption = data.freightOptions.reduce((min: any, current: any) => {
         return current.sellerCost < min.sellerCost ? current : min;
       });
 
-      console.log('🏆 OPÇÃO MAIS BARATA SELECIONADA:');
-      console.log('Método:', cheapestFreight.method);
-      console.log('Preço para cliente: R$', cheapestFreight.price);
-      console.log('CUSTO REAL DO VENDEDOR: R$', cheapestFreight.sellerCost);
-      console.log('Fonte dos dados:', cheapestFreight.source);
+      console.log('✅ OPÇÃO MAIS BARATA SELECIONADA:', {
+        método: cheapestOption.method,
+        preçoCliente: cheapestOption.price,
+        custoVendedor: cheapestOption.sellerCost,
+        fonte: cheapestOption.source
+      });
 
-      // Update product with REAL costs
+      // Atualizar produto com custos REAIS da API
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           const updatedProduct = {
             ...product,
-            freightCost: cheapestFreight.price,
-            sellerFreightCost: cheapestFreight.sellerCost, // ESTE É O VALOR REAL
-            freightMethod: cheapestFreight.method
+            freightCost: cheapestOption.price,
+            sellerFreightCost: cheapestOption.sellerCost,
+            freightMethod: cheapestOption.method
           };
           
-          console.log('✅ PRODUTO ATUALIZADO COM CUSTOS REAIS:');
-          console.log('Custo do frete para cliente:', updatedProduct.freightCost);
-          console.log('CUSTO REAL DO VENDEDOR:', updatedProduct.sellerFreightCost);
+          console.log('💾 PRODUTO ATUALIZADO:', {
+            id: productId,
+            custoCliente: updatedProduct.freightCost,
+            custoVendedor: updatedProduct.sellerFreightCost,
+            método: updatedProduct.freightMethod
+          });
           
           return updatedProduct;
         }
         return product;
       }));
 
-      const costMessage = cheapestFreight.isFreeShipping 
-        ? `${cheapestFreight.method}: Cliente R$ 0,00 | VENDEDOR PAGA R$ ${cheapestFreight.sellerCost.toFixed(2)}`
-        : `${cheapestFreight.method}: Cliente R$ ${cheapestFreight.price.toFixed(2)} | Vendedor R$ ${cheapestFreight.sellerCost.toFixed(2)}`;
-
       toast({
-        title: "✅ Custo REAL do frete calculado!",
-        description: costMessage,
+        title: "✅ Custo REAL calculado!",
+        description: `${cheapestOption.method}: Cliente R$ ${cheapestOption.price.toFixed(2)} | Vendedor R$ ${cheapestOption.sellerCost.toFixed(2)}`,
       });
 
-      console.log('🎯 CÁLCULO FINALIZADO COM SUCESSO!');
+      console.log('🎯 CÁLCULO FINALIZADO COM SUCESSO');
 
     } catch (error: any) {
-      console.error('💥 ERRO CRÍTICO NO CÁLCULO DE FRETE:');
-      console.error('Mensagem:', error.message);
-      console.error('Stack completo:', error.stack);
+      console.error('💥 ERRO NO CÁLCULO:', error);
       
       toast({
-        title: "Erro ao obter custo real do frete",
-        description: error.message || "Não foi possível obter custos reais via API do Mercado Livre",
+        title: "Erro ao calcular frete",
+        description: error.message,
         variant: "destructive"
       });
     } finally {
       setLoadingFreight(prev => ({ ...prev, [productId]: false }));
     }
-  };
-
-  const adjustPriceWithFreight = (productId: string, operation: 'add' | 'subtract') => {
-    setProducts(prev => prev.map(product => {
-      if (product.id === productId) {
-        // Only use seller's actual freight cost if available
-        const freightCost = product.sellerFreightCost;
-        if (!freightCost) {
-          toast({
-            title: "Calcule o frete primeiro",
-            description: "É necessário calcular o custo real do frete antes de ajustar o preço",
-            variant: "destructive"
-          });
-          return product;
-        }
-        
-        const adjustment = operation === 'add' ? freightCost : -freightCost;
-        return {
-          ...product,
-          adjustedPrice: product.originalPrice + adjustment
-        };
-      }
-      return product;
-    }));
-
-    toast({
-      title: "Preço ajustado com custo real do frete!",
-      description: `Custo do vendedor ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
-    });
   };
 
   if (products.length === 0) {
@@ -420,7 +378,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                             R$ {product.originalPrice.toFixed(2)}
                           </span>
                         </div>
-                        {product.sellerFreightCost && (
+                        {product.sellerFreightCost !== undefined && (
                           <div className="text-sm text-gray-600">
                             <span className="font-medium">Custo Real do Frete ({product.freightMethod}):</span>{' '}
                             <span className="text-lg font-bold text-red-600">
@@ -476,12 +434,12 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                     {loadingFreight[product.id] ? 'Calculando...' : 'Calcular Custo Real'}
                   </Button>
                   
-                  {product.sellerFreightCost && (
+                  {product.sellerFreightCost !== undefined && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => adjustPriceWithFreight(product.id, 'subtract')}
+                        onClick={() => adjustPrice(product.id, 'subtract')}
                         className="flex items-center gap-1"
                       >
                         <Minus className="h-4 w-4" />
@@ -490,7 +448,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => adjustPriceWithFreight(product.id, 'add')}
+                        onClick={() => adjustPrice(product.id, 'add')}
                         className="flex items-center gap-1"
                       >
                         <Plus className="h-4 w-4" />
