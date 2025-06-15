@@ -38,59 +38,7 @@ serve(async (req) => {
       const product = await productResponse.json()
       console.log('Product data:', product)
 
-      // Get seller's actual shipping costs using the shipments API
-      // This endpoint returns the real costs that sellers pay to Mercado Libre
-      const sellerShipmentCostsResponse = await fetch(`https://api.mercadolibre.com/shipment_labels`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          item_id: productId,
-          destination: {
-            zip_code: zipCode
-          },
-          dimensions: product.shipping?.dimensions || null,
-          shipment_type: 'forward'
-        })
-      })
-
-      let realSellerCosts = null
-      if (sellerShipmentCostsResponse.ok) {
-        realSellerCosts = await sellerShipmentCostsResponse.json()
-        console.log('Real seller shipping costs:', realSellerCosts)
-      }
-
-      // Try the shipments calculator API for seller costs
-      const shipmentCalculatorResponse = await fetch(`https://api.mercadolibre.com/shipments/shipment_option`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          item: {
-            id: productId,
-            seller_id: product.seller_id
-          },
-          zip_code_from: product.seller_address?.zip_code || null,
-          zip_code_to: zipCode,
-          list_cost: product.price,
-          category_id: product.category_id,
-          shipping_mode: product.shipping?.mode || 'me2',
-          item_price: product.price,
-          free_shipping: product.shipping?.free_shipping || false
-        })
-      })
-
-      let calculatorCosts = null
-      if (shipmentCalculatorResponse.ok) {
-        calculatorCosts = await shipmentCalculatorResponse.json()
-        console.log('Shipment calculator costs:', calculatorCosts)
-      }
-
-      // Get shipping options for customer (this shows what customer pays)
+      // Get shipping options for customer (this contains the REAL seller costs in base_cost)
       const customerShippingResponse = await fetch(`https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -100,61 +48,24 @@ serve(async (req) => {
       let customerShippingData = null
       if (customerShippingResponse.ok) {
         customerShippingData = await customerShippingResponse.json()
-        console.log('Customer shipping options:', customerShippingData)
+        console.log('Shipping options data:', customerShippingData)
       }
 
-      // Get seller shipping preferences to understand cost structure
-      const sellerPrefsResponse = await fetch(`https://api.mercadolibre.com/users/${product.seller_id}/shipping_preferences`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      })
-
-      let sellerPrefs = null
-      if (sellerPrefsResponse.ok) {
-        sellerPrefs = await sellerPrefsResponse.json()
-        console.log('Seller shipping preferences:', sellerPrefs)
-      }
-
-      // Process the real costs data
+      // Process the shipping options to get real seller costs
       let freightOptions = []
 
       if (customerShippingData?.options) {
         freightOptions = customerShippingData.options.map((option: any) => {
-          let realSellerCost = option.base_cost || option.cost || 25.00
-
-          // Try to get the real seller cost from calculator if available
-          if (calculatorCosts?.shipment_costs) {
-            const matchingCost = calculatorCosts.shipment_costs.find((cost: any) => 
-              cost.shipping_method_id === option.shipping_method_id
-            )
-            if (matchingCost) {
-              realSellerCost = matchingCost.seller_cost || matchingCost.cost || realSellerCost
-            }
-          }
-
-          // Try to get from shipment labels API
-          if (realSellerCosts?.costs) {
-            const labelCost = realSellerCosts.costs.find((cost: any) => 
-              cost.shipping_method_id === option.shipping_method_id
-            )
-            if (labelCost) {
-              realSellerCost = labelCost.seller_amount || labelCost.amount || realSellerCost
-            }
-          }
-
-          // For free shipping, use base_cost as that's what seller actually pays
-          if (product.shipping?.free_shipping && option.cost === 0) {
-            realSellerCost = option.base_cost || realSellerCost
-          }
+          // The base_cost is the REAL cost that the seller pays to Mercado Livre
+          const realSellerCost = option.base_cost || 25.00
 
           return {
             method: option.name || 'Mercado Envios',
             carrier: option.shipping_method_id || 'Mercado Envios',
             price: option.cost || 0, // What customer pays
-            sellerCost: realSellerCost, // What seller actually pays
+            sellerCost: realSellerCost, // What seller actually pays (base_cost)
             deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
-            isFreeShipping: product.shipping?.free_shipping || option.cost === 0,
+            isFreeShipping: option.cost === 0,
             source: 'api_real_cost'
           }
         })
@@ -177,7 +88,7 @@ serve(async (req) => {
           freightOptions,
           zipCode,
           productId,
-          hasRealCosts: Boolean(calculatorCosts || realSellerCosts),
+          hasRealCosts: Boolean(customerShippingData?.options),
           sellerInfo: product.seller_id
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
