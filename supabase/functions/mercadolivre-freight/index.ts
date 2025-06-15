@@ -43,6 +43,7 @@ serve(async (req) => {
       const product = await productResponse.json()
       console.log('Produto encontrado:', product.title)
       console.log('Seller ID:', product.seller_id)
+      console.log('Frete grátis do produto:', product.shipping?.free_shipping)
 
       // Get seller information for reputation details
       console.log('Buscando informações do vendedor...')
@@ -102,65 +103,74 @@ serve(async (req) => {
             
             console.log('É Mercado Envios Padrão?', isMercadoEnviosPadrao)
             
-            // Calculate the REAL seller cost based on different scenarios
-            let realSellerCost = 0
+            // Determine who pays for shipping
+            const productHasFreeShipping = product.shipping?.free_shipping === true
+            const optionHasFreeShipping = option.cost === 0
+            
+            console.log('Produto tem frete grátis:', productHasFreeShipping)
+            console.log('Opção tem custo zero:', optionHasFreeShipping)
+            
+            // Calculate the REAL cost based on who pays
+            let realCost = 0
             let calculationMethod = ''
+            let paidBy = ''
             
-            // Priority 1: If there's a discount, calculate real cost
-            if (option.discount && typeof option.discount === 'object') {
-              if (option.discount.promoted_amount && option.discount.promoted_amount > 0) {
-                // Seller pays base_cost minus ML promotional discount
-                const baseAmount = option.list_cost || option.base_cost || option.cost || 0
-                realSellerCost = baseAmount - option.discount.promoted_amount
-                calculationMethod = 'base_cost - discount_promocional'
-                console.log(`CÁLCULO COM DESCONTO: ${baseAmount} - ${option.discount.promoted_amount} = ${realSellerCost}`)
-              } else if (option.discount.rate && option.discount.rate > 0) {
-                // Percentage discount
-                const baseAmount = option.list_cost || option.base_cost || option.cost || 0
-                const discountAmount = baseAmount * (option.discount.rate / 100)
-                realSellerCost = baseAmount - discountAmount
-                calculationMethod = 'base_cost - discount_percentual'
-                console.log(`CÁLCULO COM DESCONTO %: ${baseAmount} - ${discountAmount} = ${realSellerCost}`)
+            if (productHasFreeShipping || optionHasFreeShipping) {
+              // FRETE GRÁTIS - Vendedor paga
+              paidBy = 'vendedor'
+              
+              // Priority order for seller cost calculation
+              if (option.discount && typeof option.discount === 'object') {
+                if (option.discount.promoted_amount && option.discount.promoted_amount > 0) {
+                  const baseAmount = option.list_cost || option.base_cost || option.cost || 0
+                  realCost = Math.max(0, baseAmount - option.discount.promoted_amount)
+                  calculationMethod = 'base_cost - desconto_promocional'
+                  console.log(`VENDEDOR PAGA COM DESCONTO: ${baseAmount} - ${option.discount.promoted_amount} = ${realCost}`)
+                } else if (option.discount.rate && option.discount.rate > 0) {
+                  const baseAmount = option.list_cost || option.base_cost || option.cost || 0
+                  const discountAmount = baseAmount * (option.discount.rate / 100)
+                  realCost = Math.max(0, baseAmount - discountAmount)
+                  calculationMethod = 'base_cost - desconto_percentual'
+                  console.log(`VENDEDOR PAGA COM DESCONTO %: ${baseAmount} - ${discountAmount} = ${realCost}`)
+                }
               }
+              
+              // If no discount calculated, use available cost fields
+              if (realCost === 0) {
+                if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
+                  realCost = option.seller_cost
+                  calculationMethod = 'seller_cost_direto'
+                } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+                  realCost = option.base_cost
+                  calculationMethod = 'base_cost_direto'
+                } else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+                  realCost = option.list_cost
+                  calculationMethod = 'list_cost_direto'
+                } else {
+                  // For free shipping, if all else fails, use cost as minimum seller pays
+                  realCost = option.cost || 0
+                  calculationMethod = 'cost_fallback_vendedor'
+                }
+              }
+            } else {
+              // FRETE PAGO PELO COMPRADOR
+              paidBy = 'comprador'
+              realCost = option.cost || 0
+              calculationMethod = 'cost_comprador'
+              console.log(`COMPRADOR PAGA: ${realCost}`)
             }
             
-            // Priority 2: Use seller_cost if available and no discount calculated
-            if (realSellerCost === 0 && option.seller_cost !== undefined && option.seller_cost !== null) {
-              realSellerCost = option.seller_cost
-              calculationMethod = 'seller_cost_direto'
-              console.log(`USANDO SELLER COST DIRETO: ${realSellerCost}`)
-            }
-            
-            // Priority 3: Use base_cost if available
-            if (realSellerCost === 0 && option.base_cost !== undefined && option.base_cost !== null) {
-              realSellerCost = option.base_cost
-              calculationMethod = 'base_cost_direto'
-              console.log(`USANDO BASE COST: ${realSellerCost}`)
-            }
-            
-            // Priority 4: Use list_cost if available
-            if (realSellerCost === 0 && option.list_cost !== undefined && option.list_cost !== null) {
-              realSellerCost = option.list_cost
-              calculationMethod = 'list_cost_direto'
-              console.log(`USANDO LIST COST: ${realSellerCost}`)
-            }
-            
-            // Priority 5: Use cost as last resort
-            if (realSellerCost === 0) {
-              realSellerCost = option.cost || 0
-              calculationMethod = 'cost_fallback'
-              console.log(`USANDO COST FALLBACK: ${realSellerCost}`)
-            }
-            
-            console.log(`CUSTO REAL CALCULADO: R$ ${realSellerCost} (método: ${calculationMethod})`)
+            console.log(`CUSTO FINAL: R$ ${realCost} (pago por: ${paidBy}, método: ${calculationMethod})`)
             
             return {
               method: option.name || 'Mercado Envios',
               carrier: option.shipping_method_id || 'Mercado Envios',
               price: option.cost || 0,
-              sellerCost: realSellerCost,
+              sellerCost: paidBy === 'vendedor' ? realCost : 0,
+              buyerCost: paidBy === 'comprador' ? realCost : option.cost || 0,
               deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
-              isFreeShipping: option.cost === 0,
+              isFreeShipping: productHasFreeShipping || optionHasFreeShipping,
+              paidBy: paidBy,
               source: 'direct_api_detailed',
               rawData: option,
               discount: option.discount || null,
@@ -203,9 +213,11 @@ serve(async (req) => {
               method: cost.method || 'Mercado Envios',
               carrier: cost.method || 'Mercado Envios',
               price: cost.cost || 0,
-              sellerCost: cost.seller_cost || cost.cost || 0,
+              sellerCost: cost.seller_cost || 0,
+              buyerCost: cost.cost || 0,
               deliveryTime: cost.delivery_time || '3-7 dias úteis',
               isFreeShipping: cost.cost === 0,
+              paidBy: cost.cost === 0 ? 'vendedor' : 'comprador',
               source: 'costs_api_with_seller',
               rawData: cost,
               calculationMethod: 'fallback_api'
@@ -223,12 +235,11 @@ serve(async (req) => {
 
       // Filter out any options with invalid values
       const validOptions = freightOptions.filter(option => {
-        const isValid = typeof option.sellerCost === 'number' && 
-                       typeof option.price === 'number' &&
-                       option.sellerCost >= 0 &&
-                       option.price >= 0 &&
-                       option.sellerCost !== null &&
-                       option.sellerCost !== undefined
+        const sellerCostValid = typeof option.sellerCost === 'number' && option.sellerCost >= 0
+        const buyerCostValid = typeof option.buyerCost === 'number' && option.buyerCost >= 0
+        const priceValid = typeof option.price === 'number' && option.price >= 0
+        
+        const isValid = sellerCostValid && buyerCostValid && priceValid
         
         if (!isValid) {
           console.warn('Opção filtrada por valores inválidos:', option)
@@ -242,26 +253,43 @@ serve(async (req) => {
         throw new Error('Todas as opções de frete retornaram valores inválidos')
       }
 
-      // Prioritize Mercado Envios Padrão, then find the one with lowest seller cost
+      // Prioritize Mercado Envios Padrão, then find the most appropriate option
       const mercadoEnviosPadraoOptions = validOptions.filter(option => option.isMercadoEnviosPadrao)
-      const optionsToConsider = mercadoEnviosPadraoOptions.length > 0 ? mercadoEnviosPadraoOptions : validOptions
+      let optionsToConsider = mercadoEnviosPadraoOptions.length > 0 ? mercadoEnviosPadraoOptions : validOptions
 
       console.log(`Considerando ${optionsToConsider.length} opções válidas${mercadoEnviosPadraoOptions.length > 0 ? ' (priorizando Mercado Envios Padrão)' : ''}`)
 
-      // Find the option with the lowest seller cost among valid options
-      const selectedOption = optionsToConsider.reduce((min: any, current: any) => {
-        console.log(`Comparando: ${current.method} (R$ ${current.sellerCost}) vs ${min.method} (R$ ${min.sellerCost})`)
-        return current.sellerCost < min.sellerCost ? current : min
+      // Select the best option based on who pays
+      const selectedOption = optionsToConsider.reduce((best: any, current: any) => {
+        console.log(`Comparando: ${current.method} (${current.paidBy} paga R$ ${current.paidBy === 'vendedor' ? current.sellerCost : current.buyerCost}) vs ${best.method} (${best.paidBy} paga R$ ${best.paidBy === 'vendedor' ? best.sellerCost : best.buyerCost})`)
+        
+        // For seller-paid shipping, choose lowest seller cost
+        if (current.paidBy === 'vendedor' && best.paidBy === 'vendedor') {
+          return current.sellerCost < best.sellerCost ? current : best
+        }
+        
+        // For buyer-paid shipping, choose lowest buyer cost
+        if (current.paidBy === 'comprador' && best.paidBy === 'comprador') {
+          return current.buyerCost < best.buyerCost ? current : best
+        }
+        
+        // Prefer seller-paid over buyer-paid if costs are similar
+        if (current.paidBy === 'vendedor' && best.paidBy === 'comprador') {
+          return current
+        }
+        
+        return best
       })
 
       console.log('=== OPÇÃO FINAL SELECIONADA ===')
       console.log('Método:', selectedOption.method)
       console.log('Preço Cliente:', selectedOption.price)
       console.log('Custo Vendedor:', selectedOption.sellerCost)
+      console.log('Custo Comprador:', selectedOption.buyerCost)
+      console.log('Pago por:', selectedOption.paidBy)
       console.log('Fonte:', selectedOption.source)
       console.log('É Mercado Envios Padrão:', selectedOption.isMercadoEnviosPadrao)
       console.log('Método de Cálculo:', selectedOption.calculationMethod)
-      console.log('Desconto aplicado:', selectedOption.discount)
 
       return new Response(
         JSON.stringify({ 
