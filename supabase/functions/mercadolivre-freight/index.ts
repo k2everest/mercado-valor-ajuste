@@ -79,64 +79,80 @@ serve(async (req) => {
         if (directShippingData?.options && directShippingData.options.length > 0) {
           console.log('Processando opções de frete diretas...')
           
-          // Filter for "Mercado Envios Padrão" or similar standard shipping methods
-          const standardShippingOptions = directShippingData.options.filter((option: any) => {
+          // Process all options and identify Mercado Envios Padrão
+          const processedOptions = directShippingData.options.map((option: any) => {
             const optionName = (option.name || '').toLowerCase()
-            // Convert shipping_method_id to string before calling toLowerCase
-            const shippingMethod = String(option.shipping_method_id || '').toLowerCase()
+            const shippingMethodId = String(option.shipping_method_id || '').toLowerCase()
             
-            // Look for standard Mercado Envios, not Flex
-            const isStandardShipping = 
-              optionName.includes('mercado envios') && !optionName.includes('flex') ||
-              optionName.includes('padrão') ||
-              optionName.includes('standard') ||
-              shippingMethod.includes('mercado_envios') && !shippingMethod.includes('flex')
+            console.log('=== ANÁLISE DA OPÇÃO ===')
+            console.log('Nome:', option.name)
+            console.log('Shipping Method ID:', option.shipping_method_id)
+            console.log('Cost (cliente):', option.cost)
+            console.log('Base Cost:', option.base_cost)
+            console.log('List Cost:', option.list_cost)
+            console.log('Seller Cost:', option.seller_cost)
+            console.log('Discount:', option.discount)
             
-            console.log(`Avaliando opção: ${option.name} (${option.shipping_method_id}) - É padrão: ${isStandardShipping}`)
-            return isStandardShipping
-          })
-
-          console.log(`Encontradas ${standardShippingOptions.length} opções de Mercado Envios Padrão`)
-
-          const processedOptions = (standardShippingOptions.length > 0 ? standardShippingOptions : directShippingData.options).map((option: any) => {
-            console.log('Opção processada:', {
-              name: option.name,
-              cost: option.cost,
-              base_cost: option.base_cost,
-              list_cost: option.list_cost,
-              seller_cost: option.seller_cost,
-              discount: option.discount
-            })
+            // Identify if this is Mercado Envios Padrão (not Flex)
+            const isMercadoEnviosPadrao = (
+              (optionName.includes('mercado envios') && !optionName.includes('flex')) ||
+              (optionName.includes('padrão')) ||
+              (shippingMethodId.includes('mercado_envios') && !shippingMethodId.includes('flex'))
+            )
             
-            // Calculate real seller cost based on discount information
+            console.log('É Mercado Envios Padrão?', isMercadoEnviosPadrao)
+            
+            // Calculate the REAL seller cost based on different scenarios
             let realSellerCost = 0
+            let calculationMethod = ''
             
-            if (option.discount && option.discount.promoted_amount > 0) {
-              // When there's a discount, the seller pays the base_cost minus the discount covered by ML
-              const baseCost = option.base_cost || option.list_cost || option.cost || 0
-              const mlDiscount = option.discount.promoted_amount || 0
-              realSellerCost = baseCost - mlDiscount
-              
-              console.log('=== CÁLCULO COM DESCONTO MERCADO LIVRE ===')
-              console.log('Base cost:', baseCost)
-              console.log('Desconto ML:', mlDiscount)
-              console.log('Custo real vendedor (base - desconto ML):', realSellerCost)
-            } else {
-              // No discount, use priority: seller_cost > base_cost > list_cost > cost
-              if (option.seller_cost !== undefined && option.seller_cost !== null) {
-                realSellerCost = option.seller_cost
-                console.log('Usando seller_cost:', realSellerCost)
-              } else if (option.base_cost !== undefined && option.base_cost !== null) {
-                realSellerCost = option.base_cost
-                console.log('Usando base_cost:', realSellerCost)
-              } else if (option.list_cost !== undefined && option.list_cost !== null) {
-                realSellerCost = option.list_cost
-                console.log('Usando list_cost:', realSellerCost)
-              } else {
-                realSellerCost = option.cost || 0
-                console.log('Usando cost padrão:', realSellerCost)
+            // Priority 1: If there's a discount, calculate real cost
+            if (option.discount && typeof option.discount === 'object') {
+              if (option.discount.promoted_amount && option.discount.promoted_amount > 0) {
+                // Seller pays base_cost minus ML promotional discount
+                const baseAmount = option.list_cost || option.base_cost || option.cost || 0
+                realSellerCost = baseAmount - option.discount.promoted_amount
+                calculationMethod = 'base_cost - discount_promocional'
+                console.log(`CÁLCULO COM DESCONTO: ${baseAmount} - ${option.discount.promoted_amount} = ${realSellerCost}`)
+              } else if (option.discount.rate && option.discount.rate > 0) {
+                // Percentage discount
+                const baseAmount = option.list_cost || option.base_cost || option.cost || 0
+                const discountAmount = baseAmount * (option.discount.rate / 100)
+                realSellerCost = baseAmount - discountAmount
+                calculationMethod = 'base_cost - discount_percentual'
+                console.log(`CÁLCULO COM DESCONTO %: ${baseAmount} - ${discountAmount} = ${realSellerCost}`)
               }
             }
+            
+            // Priority 2: Use seller_cost if available and no discount calculated
+            if (realSellerCost === 0 && option.seller_cost !== undefined && option.seller_cost !== null) {
+              realSellerCost = option.seller_cost
+              calculationMethod = 'seller_cost_direto'
+              console.log(`USANDO SELLER COST DIRETO: ${realSellerCost}`)
+            }
+            
+            // Priority 3: Use base_cost if available
+            if (realSellerCost === 0 && option.base_cost !== undefined && option.base_cost !== null) {
+              realSellerCost = option.base_cost
+              calculationMethod = 'base_cost_direto'
+              console.log(`USANDO BASE COST: ${realSellerCost}`)
+            }
+            
+            // Priority 4: Use list_cost if available
+            if (realSellerCost === 0 && option.list_cost !== undefined && option.list_cost !== null) {
+              realSellerCost = option.list_cost
+              calculationMethod = 'list_cost_direto'
+              console.log(`USANDO LIST COST: ${realSellerCost}`)
+            }
+            
+            // Priority 5: Use cost as last resort
+            if (realSellerCost === 0) {
+              realSellerCost = option.cost || 0
+              calculationMethod = 'cost_fallback'
+              console.log(`USANDO COST FALLBACK: ${realSellerCost}`)
+            }
+            
+            console.log(`CUSTO REAL CALCULADO: R$ ${realSellerCost} (método: ${calculationMethod})`)
             
             return {
               method: option.name || 'Mercado Envios',
@@ -148,17 +164,25 @@ serve(async (req) => {
               source: 'direct_api_detailed',
               rawData: option,
               discount: option.discount || null,
-              isStandardShipping: standardShippingOptions.includes(option)
+              isMercadoEnviosPadrao: isMercadoEnviosPadrao,
+              calculationMethod: calculationMethod
             }
           })
 
-          freightOptions = processedOptions
+          // Filter for Mercado Envios Padrão options first
+          const mercadoEnviosPadraoOptions = processedOptions.filter(option => option.isMercadoEnviosPadrao)
+          
+          console.log(`Encontradas ${mercadoEnviosPadraoOptions.length} opções de Mercado Envios Padrão`)
+          console.log(`Total de opções processadas: ${processedOptions.length}`)
+          
+          // Use Mercado Envios Padrão if available, otherwise use all options
+          freightOptions = mercadoEnviosPadraoOptions.length > 0 ? mercadoEnviosPadraoOptions : processedOptions
         }
       } else {
         console.error('Falha na API de frete direto:', directShippingResponse.status, await directShippingResponse.text())
       }
 
-      // Method 2: Shipping costs API with seller context
+      // Method 2: Shipping costs API with seller context (fallback)
       if (freightOptions.length === 0) {
         console.log('=== TENTATIVA 2: API de custos de frete com contexto do vendedor ===')
         const costsUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=${product.seller_id}&zip_code_to=${zipCode}&item_id=${productId}`
@@ -183,93 +207,12 @@ serve(async (req) => {
               deliveryTime: cost.delivery_time || '3-7 dias úteis',
               isFreeShipping: cost.cost === 0,
               source: 'costs_api_with_seller',
-              rawData: cost
+              rawData: cost,
+              calculationMethod: 'fallback_api'
             }))
           }
         } else {
           console.error('Falha na API de custos:', costsResponse.status, await costsResponse.text())
-        }
-      }
-
-      // Method 3: Shipping calculator API with item context
-      if (freightOptions.length === 0) {
-        console.log('=== TENTATIVA 3: Calculadora de frete com contexto do item ===')
-        const calculatorUrl = `https://api.mercadolibre.com/sites/MLB/shipping_calculator`
-        console.log('URL:', calculatorUrl)
-        
-        const calculatorBody = {
-          items: [{
-            id: productId,
-            quantity: 1
-          }],
-          zip_code_to: zipCode,
-          zip_code_from: product.location?.city?.id || '1',
-          shipping_method: 'custom',
-          include_seller_costs: true
-        }
-        
-        console.log('Body da requisição:', JSON.stringify(calculatorBody, null, 2))
-        
-        const calculatorResponse = await fetch(calculatorUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(calculatorBody)
-        })
-
-        if (calculatorResponse.ok) {
-          const calculatorData = await calculatorResponse.json()
-          console.log('Resposta da calculadora de frete:', JSON.stringify(calculatorData, null, 2))
-          
-          if (calculatorData?.costs && calculatorData.costs.length > 0) {
-            freightOptions = calculatorData.costs.map((cost: any) => ({
-              method: cost.method || 'Mercado Envios',
-              carrier: cost.method || 'Mercado Envios',
-              price: cost.cost || 0,
-              sellerCost: cost.seller_cost || cost.base_cost || cost.cost || 0,
-              deliveryTime: cost.delivery_time || '3-7 dias úteis',
-              isFreeShipping: cost.cost === 0,
-              source: 'calculator_api_with_context',
-              rawData: cost
-            }))
-          }
-        } else {
-          console.error('Falha na calculadora de frete:', calculatorResponse.status, await calculatorResponse.text())
-        }
-      }
-
-      // Method 4: Generic shipping costs as last resort
-      if (freightOptions.length === 0) {
-        console.log('=== TENTATIVA 4: Custos genéricos de frete (último recurso) ===')
-        const genericUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=01310100&zip_code_to=${zipCode}`
-        console.log('URL:', genericUrl)
-        
-        const genericResponse = await fetch(genericUrl, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        })
-
-        if (genericResponse.ok) {
-          const genericData = await genericResponse.json()
-          console.log('Resposta dos custos genéricos:', JSON.stringify(genericData, null, 2))
-          
-          if (genericData?.costs && genericData.costs.length > 0) {
-            freightOptions = genericData.costs.map((cost: any) => ({
-              method: cost.method || 'Mercado Envios',
-              carrier: cost.method || 'Mercado Envios',
-              price: cost.cost || 0,
-              sellerCost: cost.cost || 0,
-              deliveryTime: '3-7 dias úteis',
-              isFreeShipping: false,
-              source: 'generic_api_fallback',
-              rawData: cost
-            }))
-          }
-        } else {
-          console.error('Falha nos custos genéricos:', genericResponse.status, await genericResponse.text())
         }
       }
 
@@ -278,17 +221,17 @@ serve(async (req) => {
         throw new Error('Não foi possível obter custos reais de frete da API do Mercado Livre')
       }
 
-      // Filter out any options with suspicious values
+      // Filter out any options with invalid values
       const validOptions = freightOptions.filter(option => {
         const isValid = typeof option.sellerCost === 'number' && 
                        typeof option.price === 'number' &&
                        option.sellerCost >= 0 &&
                        option.price >= 0 &&
-                       option.sellerCost !== 25 &&
-                       option.price !== 25
+                       option.sellerCost !== null &&
+                       option.sellerCost !== undefined
         
         if (!isValid) {
-          console.warn('Opção filtrada por valores suspeitos:', option)
+          console.warn('Opção filtrada por valores inválidos:', option)
         }
         
         return isValid
@@ -296,35 +239,38 @@ serve(async (req) => {
 
       if (validOptions.length === 0) {
         console.error('=== TODAS AS OPÇÕES FORAM FILTRADAS ===')
-        throw new Error('Todas as opções de frete retornaram valores suspeitos')
+        throw new Error('Todas as opções de frete retornaram valores inválidos')
       }
 
-      // Prioritize standard shipping options, then find the cheapest
-      const standardOptions = validOptions.filter(option => option.isStandardShipping)
-      const optionsToConsider = standardOptions.length > 0 ? standardOptions : validOptions
+      // Prioritize Mercado Envios Padrão, then find the one with lowest seller cost
+      const mercadoEnviosPadraoOptions = validOptions.filter(option => option.isMercadoEnviosPadrao)
+      const optionsToConsider = mercadoEnviosPadraoOptions.length > 0 ? mercadoEnviosPadraoOptions : validOptions
 
-      console.log(`Considerando ${optionsToConsider.length} opções${standardOptions.length > 0 ? ' (priorizando Mercado Envios Padrão)' : ''}`)
+      console.log(`Considerando ${optionsToConsider.length} opções válidas${mercadoEnviosPadraoOptions.length > 0 ? ' (priorizando Mercado Envios Padrão)' : ''}`)
 
-      const cheapestOption = optionsToConsider.reduce((min: any, current: any) => {
+      // Find the option with the lowest seller cost among valid options
+      const selectedOption = optionsToConsider.reduce((min: any, current: any) => {
+        console.log(`Comparando: ${current.method} (R$ ${current.sellerCost}) vs ${min.method} (R$ ${min.sellerCost})`)
         return current.sellerCost < min.sellerCost ? current : min
       })
 
       console.log('=== OPÇÃO FINAL SELECIONADA ===')
-      console.log('Método:', cheapestOption.method)
-      console.log('Preço Cliente:', cheapestOption.price)
-      console.log('Custo Vendedor:', cheapestOption.sellerCost)
-      console.log('Fonte:', cheapestOption.source)
-      console.log('É Mercado Envios Padrão:', cheapestOption.isStandardShipping)
-      console.log('Desconto aplicado:', cheapestOption.discount)
+      console.log('Método:', selectedOption.method)
+      console.log('Preço Cliente:', selectedOption.price)
+      console.log('Custo Vendedor:', selectedOption.sellerCost)
+      console.log('Fonte:', selectedOption.source)
+      console.log('É Mercado Envios Padrão:', selectedOption.isMercadoEnviosPadrao)
+      console.log('Método de Cálculo:', selectedOption.calculationMethod)
+      console.log('Desconto aplicado:', selectedOption.discount)
 
       return new Response(
         JSON.stringify({ 
           freightOptions: validOptions,
-          selectedOption: cheapestOption,
+          selectedOption: selectedOption,
           zipCode,
           productId,
           hasRealCosts: true,
-          apiSource: cheapestOption.source,
+          apiSource: selectedOption.source,
           productData: {
             title: product.title,
             price: product.price,
