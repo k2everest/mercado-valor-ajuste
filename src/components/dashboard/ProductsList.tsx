@@ -45,8 +45,19 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [zipCode, setZipCode] = useState('');
   const { t } = useLanguage();
 
+  console.log('ProductsList rendered with:', {
+    productsCount: products.length,
+    pagination,
+    hasOnLoadMore: !!onLoadMore
+  });
+
   const loadMoreProducts = async (limit: number) => {
-    if (!pagination || !onLoadMore) return;
+    if (!pagination || !onLoadMore) {
+      console.log('Cannot load more - missing pagination or onLoadMore');
+      return;
+    }
+    
+    console.log('Loading more products:', { limit, currentCount: products.length, pagination });
     
     setLoadingMore(true);
     try {
@@ -65,6 +76,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       if (error) throw error;
 
+      console.log('Loaded new products:', data.products.length);
+
       const newProducts = [...products, ...data.products];
       setProducts(newProducts);
       onLoadMore(newProducts, data.pagination);
@@ -75,6 +88,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       });
 
     } catch (error: any) {
+      console.error('Error loading more products:', error);
       toast({
         title: "❌ Erro ao carregar produtos",
         description: error.message,
@@ -86,7 +100,12 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   };
 
   const loadAllProducts = async () => {
-    if (!pagination || !onLoadMore) return;
+    if (!pagination || !onLoadMore) {
+      console.log('Cannot load all - missing pagination or onLoadMore');
+      return;
+    }
+    
+    console.log('Loading ALL products');
     
     setLoadingMore(true);
     try {
@@ -105,6 +124,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       if (error) throw error;
 
+      console.log('Loaded ALL products:', data.products.length);
+
       setProducts(data.products);
       onLoadMore(data.products, data.pagination);
 
@@ -114,6 +135,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       });
 
     } catch (error: any) {
+      console.error('Error loading all products:', error);
       toast({
         title: "❌ Erro ao carregar todos os produtos",
         description: error.message,
@@ -249,7 +271,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
-    // Clear all old freight data before calculating new ones
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
         console.log('🧹 LIMPANDO DADOS ANTIGOS DE FRETE para produto:', productId);
@@ -292,7 +313,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       console.log('📦 RESPOSTA COMPLETA DA API MELHORADA:', JSON.stringify(data, null, 2));
       
-      // Use selectedOption if available, otherwise fall back to first option
       const selectedOption = data?.selectedOption || data?.freightOptions?.[0];
       
       if (!selectedOption) {
@@ -307,7 +327,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       console.log('- Fonte:', selectedOption.source);
       console.log('- Desconto:', selectedOption.discount);
 
-      // Strict validation of values from API
       if (selectedOption.price === undefined || selectedOption.sellerCost === undefined) {
         console.error('❌ VALORES INVÁLIDOS NA RESPOSTA DA API:', selectedOption);
         throw new Error('API retornou valores inválidos para o frete');
@@ -329,7 +348,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       console.log('- Custo Final Vendedor:', finalSellerCost);
       console.log('- Método Final:', selectedOption.method);
 
-      // Update product with REAL API values
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           const updatedProduct = {
@@ -364,7 +382,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     } catch (error: any) {
       console.error('💥 ERRO COMPLETO NO CÁLCULO:', error);
       
-      // In case of error, ensure there are no old values
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           return {
@@ -404,8 +421,19 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   return (
     <div className="space-y-6">
+      {/* Debug Info */}
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <h4 className="font-semibold text-blue-800 mb-2">Debug Info:</h4>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>Products loaded: {products.length}</p>
+          <p>Pagination: {pagination ? JSON.stringify(pagination) : 'Not available'}</p>
+          <p>Has onLoadMore: {onLoadMore ? 'Yes' : 'No'}</p>
+          <p>Loading more: {loadingMore ? 'Yes' : 'No'}</p>
+        </div>
+      </div>
+
       {/* Pagination Controls */}
-      {pagination && (
+      {pagination && onLoadMore && (
         <ProductsPagination
           pagination={pagination}
           onLoadMore={loadMoreProducts}
