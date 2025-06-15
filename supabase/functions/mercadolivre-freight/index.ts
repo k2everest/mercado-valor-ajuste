@@ -13,7 +13,10 @@ serve(async (req) => {
 
   try {
     const { action, productId, zipCode, accessToken } = await req.json()
-    console.log('Mercado Livre freight request:', { action, productId, zipCode })
+    console.log('=== INÍCIO DO CÁLCULO DE FRETE ===')
+    console.log('Action:', action)
+    console.log('Product ID:', productId)
+    console.log('ZIP Code:', zipCode)
     
     if (!accessToken) {
       throw new Error('Token de acesso é obrigatório')
@@ -25,6 +28,7 @@ serve(async (req) => {
       }
 
       // Get product details first
+      console.log('Buscando detalhes do produto...')
       const productResponse = await fetch(`https://api.mercadolibre.com/items/${productId}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -32,138 +36,169 @@ serve(async (req) => {
       })
 
       if (!productResponse.ok) {
+        console.error('Erro ao buscar produto:', productResponse.status)
         throw new Error(`Falha ao buscar produto: ${productResponse.status}`)
       }
 
       const product = await productResponse.json()
-      console.log('Product data:', product)
+      console.log('Produto encontrado:', product.title)
+      console.log('Seller ID:', product.seller_id)
 
-      // Get shipping options for customer (this contains the REAL seller costs in base_cost)
-      const customerShippingResponse = await fetch(`https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}`, {
+      // Try multiple API endpoints to get real shipping costs
+      let freightOptions = []
+
+      // Method 1: Direct shipping options for the item
+      console.log('=== TENTATIVA 1: Opções de frete diretas ===')
+      const directShippingUrl = `https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}`
+      console.log('URL:', directShippingUrl)
+      
+      const directShippingResponse = await fetch(directShippingUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
       })
 
-      let freightOptions = []
+      if (directShippingResponse.ok) {
+        const directShippingData = await directShippingResponse.json()
+        console.log('Resposta completa da API de frete direto:', JSON.stringify(directShippingData, null, 2))
 
-      if (customerShippingResponse.ok) {
-        const customerShippingData = await customerShippingResponse.json()
-        console.log('Full shipping options response:', JSON.stringify(customerShippingData, null, 2))
-
-        if (customerShippingData?.options && customerShippingData.options.length > 0) {
-          freightOptions = customerShippingData.options.map((option: any) => {
-            console.log('Processing shipping option:', JSON.stringify(option, null, 2))
+        if (directShippingData?.options && directShippingData.options.length > 0) {
+          console.log('Processando opções de frete diretas...')
+          freightOptions = directShippingData.options.map((option: any) => {
+            console.log('Opção processada:', {
+              name: option.name,
+              cost: option.cost,
+              base_cost: option.base_cost,
+              list_cost: option.list_cost
+            })
             
-            // Use the base_cost directly as the real seller cost
-            const realSellerCost = option.base_cost || option.cost || 0
-
+            const sellerCost = option.base_cost || option.list_cost || option.cost || 0
+            
             return {
               method: option.name || 'Mercado Envios',
               carrier: option.shipping_method_id || 'Mercado Envios',
-              price: option.cost || 0, // What customer pays
-              sellerCost: realSellerCost, // What seller actually pays (base_cost)
+              price: option.cost || 0,
+              sellerCost: sellerCost,
               deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
               isFreeShipping: option.cost === 0,
-              source: 'api_real_cost',
-              rawOption: option // Keep raw data for debugging
+              source: 'direct_api',
+              rawData: option
             }
           })
         }
       } else {
-        console.error('Failed to get shipping options:', customerShippingResponse.status, await customerShippingResponse.text())
+        console.error('Falha na API de frete direto:', directShippingResponse.status, await directShippingResponse.text())
       }
 
-      // Try alternative API endpoint if first one failed
+      // Method 2: Shipping calculator API
       if (freightOptions.length === 0) {
-        console.log('Trying alternative shipping calculation method...')
+        console.log('=== TENTATIVA 2: Calculadora de frete ===')
+        const calculatorUrl = `https://api.mercadolibre.com/sites/MLB/shipping_calculator`
+        console.log('URL:', calculatorUrl)
         
-        const alternativeResponse = await fetch(`https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=01310100&zip_code_to=${zipCode}`, {
+        const calculatorBody = {
+          items: [{
+            id: productId,
+            quantity: 1
+          }],
+          zip_code_to: zipCode,
+          shipping_method: 'custom'
+        }
+        
+        console.log('Body da requisição:', JSON.stringify(calculatorBody, null, 2))
+        
+        const calculatorResponse = await fetch(calculatorUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(calculatorBody)
+        })
+
+        if (calculatorResponse.ok) {
+          const calculatorData = await calculatorResponse.json()
+          console.log('Resposta da calculadora de frete:', JSON.stringify(calculatorData, null, 2))
+          
+          if (calculatorData?.costs && calculatorData.costs.length > 0) {
+            freightOptions = calculatorData.costs.map((cost: any) => ({
+              method: cost.method || 'Mercado Envios',
+              carrier: cost.method || 'Mercado Envios',
+              price: cost.cost || 0,
+              sellerCost: cost.seller_cost || cost.cost || 0,
+              deliveryTime: cost.delivery_time || '3-7 dias úteis',
+              isFreeShipping: cost.cost === 0,
+              source: 'calculator_api',
+              rawData: cost
+            }))
+          }
+        } else {
+          console.error('Falha na calculadora de frete:', calculatorResponse.status, await calculatorResponse.text())
+        }
+      }
+
+      // Method 3: Generic shipping costs
+      if (freightOptions.length === 0) {
+        console.log('=== TENTATIVA 3: Custos genéricos de frete ===')
+        const genericUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=01310100&zip_code_to=${zipCode}`
+        console.log('URL:', genericUrl)
+        
+        const genericResponse = await fetch(genericUrl, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
           },
         })
 
-        if (alternativeResponse.ok) {
-          const alternativeData = await alternativeResponse.json()
-          console.log('Alternative shipping data:', JSON.stringify(alternativeData, null, 2))
+        if (genericResponse.ok) {
+          const genericData = await genericResponse.json()
+          console.log('Resposta dos custos genéricos:', JSON.stringify(genericData, null, 2))
           
-          if (alternativeData?.costs && alternativeData.costs.length > 0) {
-            freightOptions = alternativeData.costs.map((cost: any) => ({
+          if (genericData?.costs && genericData.costs.length > 0) {
+            freightOptions = genericData.costs.map((cost: any) => ({
               method: cost.method || 'Mercado Envios',
               carrier: cost.method || 'Mercado Envios',
               price: cost.cost || 0,
-              sellerCost: cost.cost || 0, // In this case, seller pays the same
+              sellerCost: cost.cost || 0,
               deliveryTime: '3-7 dias úteis',
               isFreeShipping: false,
-              source: 'alternative_api'
+              source: 'generic_api',
+              rawData: cost
             }))
           }
+        } else {
+          console.error('Falha nos custos genéricos:', genericResponse.status, await genericResponse.text())
         }
       }
 
-      // Only use manual calculation as absolute last resort
+      // REMOVED: No more manual calculation fallback
       if (freightOptions.length === 0) {
-        console.log('No shipping options found, calculating based on product weight/dimensions')
-        
-        // Calculate based on product attributes
-        const weight = product.attributes?.find((attr: any) => attr.id === 'WEIGHT')?.value_name
-        const dimensions = {
-          length: product.attributes?.find((attr: any) => attr.id === 'LENGTH')?.value_name,
-          width: product.attributes?.find((attr: any) => attr.id === 'WIDTH')?.value_name,
-          height: product.attributes?.find((attr: any) => attr.id === 'HEIGHT')?.value_name
-        }
-        
-        console.log('Product weight:', weight, 'Dimensions:', dimensions)
-        
-        // Basic freight calculation based on weight (in grams) and distance
-        let calculatedCost = 8.50 // Base cost
-        
-        if (weight) {
-          const weightInKg = parseFloat(weight.replace(/[^\d.]/g, '')) / 1000
-          if (weightInKg > 1) {
-            calculatedCost += (weightInKg - 1) * 2.50 // Additional cost per kg
-          }
-        }
-        
-        // Add dimension-based cost
-        if (dimensions.length || dimensions.width || dimensions.height) {
-          calculatedCost += 3.00 // Additional dimensional cost
-        }
-        
-        // Round to nearest 0.50
-        calculatedCost = Math.ceil(calculatedCost * 2) / 2
-        
-        freightOptions = [{
-          method: product.shipping?.free_shipping ? 'Frete Grátis' : 'Frete Calculado',
-          carrier: 'Mercado Envios',
-          price: product.shipping?.free_shipping ? 0 : calculatedCost,
-          sellerCost: calculatedCost,
-          deliveryTime: '3-7 dias úteis',
-          isFreeShipping: product.shipping?.free_shipping || false,
-          source: 'calculated',
-          calculation: {
-            baseCost: 8.50,
-            weight: weight,
-            dimensions: dimensions,
-            finalCost: calculatedCost
-          }
-        }]
+        console.error('=== NENHUMA OPÇÃO DE FRETE ENCONTRADA ===')
+        throw new Error('Não foi possível obter custos reais de frete da API do Mercado Livre')
       }
 
-      console.log('Final freight options:', JSON.stringify(freightOptions, null, 2))
+      console.log('=== OPÇÕES FINAIS DE FRETE ===')
+      console.log('Total de opções encontradas:', freightOptions.length)
+      freightOptions.forEach((option, index) => {
+        console.log(`Opção ${index + 1}:`, {
+          method: option.method,
+          price: option.price,
+          sellerCost: option.sellerCost,
+          source: option.source
+        })
+      })
 
       return new Response(
         JSON.stringify({ 
           freightOptions,
           zipCode,
           productId,
-          hasRealCosts: freightOptions.length > 0 && freightOptions[0].source === 'api_real_cost',
-          sellerInfo: product.seller_id,
+          hasRealCosts: true,
+          apiSource: freightOptions[0]?.source,
           productData: {
             title: product.title,
             price: product.price,
-            freeShipping: product.shipping?.free_shipping
+            freeShipping: product.shipping?.free_shipping,
+            sellerId: product.seller_id
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -176,7 +211,9 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error in mercadolivre-freight:', error)
+    console.error('=== ERRO NO CÁLCULO DE FRETE ===')
+    console.error('Erro:', error.message)
+    console.error('Stack:', error.stack)
     return new Response(
       JSON.stringify({ error: error.message || 'Erro interno do servidor' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
