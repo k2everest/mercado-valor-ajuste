@@ -45,33 +45,33 @@ serve(async (req) => {
         },
       })
 
-      let customerShippingData = null
-      if (customerShippingResponse.ok) {
-        customerShippingData = await customerShippingResponse.json()
-        console.log('Shipping options data:', customerShippingData)
-      }
-
-      // Process the shipping options to get real seller costs
       let freightOptions = []
 
-      if (customerShippingData?.options) {
-        freightOptions = customerShippingData.options.map((option: any) => {
-          // The base_cost is the REAL cost that the seller pays to Mercado Livre
-          const realSellerCost = option.base_cost || 25.00
+      if (customerShippingResponse.ok) {
+        const customerShippingData = await customerShippingResponse.json()
+        console.log('Shipping options data:', customerShippingData)
 
-          return {
-            method: option.name || 'Mercado Envios',
-            carrier: option.shipping_method_id || 'Mercado Envios',
-            price: option.cost || 0, // What customer pays
-            sellerCost: realSellerCost, // What seller actually pays (base_cost)
-            deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
-            isFreeShipping: option.cost === 0,
-            source: 'api_real_cost'
-          }
-        })
-      } else {
-        // Fallback if no shipping options available
-        const estimatedCost = product.shipping?.free_shipping ? 25.00 : 15.00
+        if (customerShippingData?.options && customerShippingData.options.length > 0) {
+          freightOptions = customerShippingData.options.map((option: any) => {
+            // Use the base_cost directly as the real seller cost
+            const realSellerCost = option.base_cost || 0
+
+            return {
+              method: option.name || 'Mercado Envios',
+              carrier: option.shipping_method_id || 'Mercado Envios',
+              price: option.cost || 0, // What customer pays
+              sellerCost: realSellerCost, // What seller actually pays (base_cost)
+              deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
+              isFreeShipping: option.cost === 0,
+              source: 'api_real_cost'
+            }
+          })
+        }
+      }
+
+      // Only use fallback if no shipping options were found
+      if (freightOptions.length === 0) {
+        const estimatedCost = product.shipping?.free_shipping ? 15.00 : 12.00
         freightOptions = [{
           method: product.shipping?.free_shipping ? 'Frete Grátis' : 'Frete Padrão',
           carrier: 'Mercado Envios',
@@ -88,7 +88,7 @@ serve(async (req) => {
           freightOptions,
           zipCode,
           productId,
-          hasRealCosts: Boolean(customerShippingData?.options),
+          hasRealCosts: freightOptions.length > 0 && freightOptions[0].source === 'api_real_cost',
           sellerInfo: product.seller_id
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
