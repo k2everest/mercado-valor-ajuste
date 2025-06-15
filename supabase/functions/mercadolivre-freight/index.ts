@@ -88,27 +88,41 @@ serve(async (req) => {
               discount: option.discount
             })
             
-            // Priority for seller cost: seller_cost > base_cost > list_cost > cost
-            let sellerCost = 0
-            if (option.seller_cost !== undefined && option.seller_cost !== null) {
-              sellerCost = option.seller_cost
-              console.log('Usando seller_cost:', sellerCost)
-            } else if (option.base_cost !== undefined && option.base_cost !== null) {
-              sellerCost = option.base_cost
-              console.log('Usando base_cost:', sellerCost)
-            } else if (option.list_cost !== undefined && option.list_cost !== null) {
-              sellerCost = option.list_cost
-              console.log('Usando list_cost:', sellerCost)
+            // Calculate real seller cost based on discount information
+            let realSellerCost = 0
+            
+            if (option.discount && option.discount.promoted_amount > 0) {
+              // When there's a discount, the seller pays the base_cost minus the discount covered by ML
+              const baseCost = option.base_cost || option.list_cost || option.cost || 0
+              const mlDiscount = option.discount.promoted_amount || 0
+              realSellerCost = baseCost - mlDiscount
+              
+              console.log('=== CÁLCULO COM DESCONTO MERCADO LIVRE ===')
+              console.log('Base cost:', baseCost)
+              console.log('Desconto ML:', mlDiscount)
+              console.log('Custo real vendedor (base - desconto ML):', realSellerCost)
             } else {
-              sellerCost = option.cost || 0
-              console.log('Usando cost padrão:', sellerCost)
+              // No discount, use priority: seller_cost > base_cost > list_cost > cost
+              if (option.seller_cost !== undefined && option.seller_cost !== null) {
+                realSellerCost = option.seller_cost
+                console.log('Usando seller_cost:', realSellerCost)
+              } else if (option.base_cost !== undefined && option.base_cost !== null) {
+                realSellerCost = option.base_cost
+                console.log('Usando base_cost:', realSellerCost)
+              } else if (option.list_cost !== undefined && option.list_cost !== null) {
+                realSellerCost = option.list_cost
+                console.log('Usando list_cost:', realSellerCost)
+              } else {
+                realSellerCost = option.cost || 0
+                console.log('Usando cost padrão:', realSellerCost)
+              }
             }
             
             return {
               method: option.name || 'Mercado Envios',
               carrier: option.shipping_method_id || 'Mercado Envios',
               price: option.cost || 0,
-              sellerCost: sellerCost,
+              sellerCost: realSellerCost,
               deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
               isFreeShipping: option.cost === 0,
               source: 'direct_api_detailed',
@@ -243,12 +257,12 @@ serve(async (req) => {
 
       // Filter out any options with suspicious values
       const validOptions = freightOptions.filter(option => {
-        const isValid = option.sellerCost !== 25 && 
-                       option.price !== 25 && 
-                       typeof option.sellerCost === 'number' && 
+        const isValid = typeof option.sellerCost === 'number' && 
                        typeof option.price === 'number' &&
                        option.sellerCost >= 0 &&
-                       option.price >= 0
+                       option.price >= 0 &&
+                       option.sellerCost !== 25 &&
+                       option.price !== 25
         
         if (!isValid) {
           console.warn('Opção filtrada por valores suspeitos:', option)
