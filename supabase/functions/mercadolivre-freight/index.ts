@@ -78,7 +78,26 @@ serve(async (req) => {
 
         if (directShippingData?.options && directShippingData.options.length > 0) {
           console.log('Processando opções de frete diretas...')
-          freightOptions = directShippingData.options.map((option: any) => {
+          
+          // Filter for "Mercado Envios Padrão" or similar standard shipping methods
+          const standardShippingOptions = directShippingData.options.filter((option: any) => {
+            const optionName = (option.name || '').toLowerCase()
+            const shippingMethod = (option.shipping_method_id || '').toLowerCase()
+            
+            // Look for standard Mercado Envios, not Flex
+            const isStandardShipping = 
+              optionName.includes('mercado envios') && !optionName.includes('flex') ||
+              optionName.includes('padrão') ||
+              optionName.includes('standard') ||
+              shippingMethod.includes('mercado_envios') && !shippingMethod.includes('flex')
+            
+            console.log(`Avaliando opção: ${option.name} (${option.shipping_method_id}) - É padrão: ${isStandardShipping}`)
+            return isStandardShipping
+          })
+
+          console.log(`Encontradas ${standardShippingOptions.length} opções de Mercado Envios Padrão`)
+
+          const processedOptions = (standardShippingOptions.length > 0 ? standardShippingOptions : directShippingData.options).map((option: any) => {
             console.log('Opção processada:', {
               name: option.name,
               cost: option.cost,
@@ -127,9 +146,12 @@ serve(async (req) => {
               isFreeShipping: option.cost === 0,
               source: 'direct_api_detailed',
               rawData: option,
-              discount: option.discount || null
+              discount: option.discount || null,
+              isStandardShipping: standardShippingOptions.includes(option)
             }
           })
+
+          freightOptions = processedOptions
         }
       } else {
         console.error('Falha na API de frete direto:', directShippingResponse.status, await directShippingResponse.text())
@@ -276,8 +298,13 @@ serve(async (req) => {
         throw new Error('Todas as opções de frete retornaram valores suspeitos')
       }
 
-      // Find the cheapest option based on seller cost
-      const cheapestOption = validOptions.reduce((min: any, current: any) => {
+      // Prioritize standard shipping options, then find the cheapest
+      const standardOptions = validOptions.filter(option => option.isStandardShipping)
+      const optionsToConsider = standardOptions.length > 0 ? standardOptions : validOptions
+
+      console.log(`Considerando ${optionsToConsider.length} opções${standardOptions.length > 0 ? ' (priorizando Mercado Envios Padrão)' : ''}`)
+
+      const cheapestOption = optionsToConsider.reduce((min: any, current: any) => {
         return current.sellerCost < min.sellerCost ? current : min
       })
 
@@ -286,6 +313,7 @@ serve(async (req) => {
       console.log('Preço Cliente:', cheapestOption.price)
       console.log('Custo Vendedor:', cheapestOption.sellerCost)
       console.log('Fonte:', cheapestOption.source)
+      console.log('É Mercado Envios Padrão:', cheapestOption.isStandardShipping)
       console.log('Desconto aplicado:', cheapestOption.discount)
 
       return new Response(
