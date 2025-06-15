@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -200,7 +201,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         fonte: cheapestOption.source
       });
 
-      // Atualizar produto com custos REAIS da API
+      // Atualizar produto com custos REAIS da API - SEM valores hardcoded
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           const updatedProduct = {
@@ -210,12 +211,18 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
             freightMethod: cheapestOption.method
           };
           
-          console.log('💾 PRODUTO ATUALIZADO:', {
+          console.log('💾 PRODUTO ATUALIZADO COM VALORES REAIS DA API:', {
             id: productId,
             custoCliente: updatedProduct.freightCost,
             custoVendedor: updatedProduct.sellerFreightCost,
-            método: updatedProduct.freightMethod
+            método: updatedProduct.freightMethod,
+            fonte: cheapestOption.source
           });
+          
+          console.log('🔍 VERIFICAÇÃO: Valores que serão exibidos na tela:');
+          console.log('- Custo para o cliente:', updatedProduct.freightCost);
+          console.log('- Custo real do vendedor:', updatedProduct.sellerFreightCost);
+          console.log('- Método:', updatedProduct.freightMethod);
           
           return updatedProduct;
         }
@@ -227,7 +234,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         description: `${cheapestOption.method}: Cliente R$ ${cheapestOption.price.toFixed(2)} | Vendedor R$ ${cheapestOption.sellerCost.toFixed(2)}`,
       });
 
-      console.log('🎯 CÁLCULO FINALIZADO COM SUCESSO');
+      console.log('🎯 CÁLCULO FINALIZADO - VALORES REAIS APLICADOS');
 
     } catch (error: any) {
       console.error('💥 ERRO NO CÁLCULO:', error);
