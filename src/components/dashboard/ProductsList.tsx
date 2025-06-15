@@ -20,7 +20,7 @@ interface Product {
   availableQuantity?: number;
   soldQuantity?: number;
   freightCost?: number;
-  sellerFreightCost?: number; // New field for seller's actual cost
+  sellerFreightCost?: number;
   freightMethod?: string;
 }
 
@@ -37,8 +37,17 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        // Use seller's actual freight cost for calculations
-        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
+        // Only use seller's actual freight cost if available
+        const freightCost = product.sellerFreightCost;
+        if (!freightCost) {
+          toast({
+            title: "Calcule o frete primeiro",
+            description: "É necessário calcular o custo real do frete antes de ajustar o preço",
+            variant: "destructive"
+          });
+          return product;
+        }
+        
         const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
@@ -55,11 +64,12 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   };
 
   const adjustAllPrices = (operation: 'add' | 'subtract') => {
+    let adjustedCount = 0;
+    
     setProducts(prev => prev.map(product => {
-      if (product.freeShipping) {
-        // Use seller's actual freight cost for free shipping products
-        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
-        const adjustment = operation === 'add' ? freightCost : -freightCost;
+      if (product.freeShipping && product.sellerFreightCost) {
+        const adjustment = operation === 'add' ? product.sellerFreightCost : -product.sellerFreightCost;
+        adjustedCount++;
         return {
           ...product,
           adjustedPrice: product.originalPrice + adjustment
@@ -68,11 +78,18 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
       return product;
     }));
 
-    const freeShippingCount = products.filter(p => p.freeShipping).length;
-    toast({
-      title: "Preços ajustados em massa!",
-      description: `${freeShippingCount} produtos com frete grátis foram ajustados com o custo real do vendedor`,
-    });
+    if (adjustedCount === 0) {
+      toast({
+        title: "Nenhum produto ajustado",
+        description: "Calcule o custo real do frete primeiro para produtos com frete grátis",
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Preços ajustados em massa!",
+        description: `${adjustedCount} produtos com frete grátis foram ajustados com o custo real do vendedor`,
+      });
+    }
   };
 
   const exportToCSV = () => {
@@ -145,7 +162,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         body: { 
           action: 'getShippingCosts',
           productId,
-          zipCode: zipCode.replace(/\D/g, ''), // Remove caracteres não numéricos
+          zipCode: zipCode.replace(/\D/g, ''),
           accessToken
         }
       });
@@ -167,8 +184,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         if (product.id === productId) {
           return {
             ...product,
-            freightCost: cheapestFreight.price, // What customer pays
-            sellerFreightCost: cheapestFreight.sellerCost, // What seller actually pays
+            freightCost: cheapestFreight.price,
+            sellerFreightCost: cheapestFreight.sellerCost,
             freightMethod: cheapestFreight.method
           };
         }
@@ -199,8 +216,17 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPriceWithFreight = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        // Use seller's actual freight cost
-        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
+        // Only use seller's actual freight cost if available
+        const freightCost = product.sellerFreightCost;
+        if (!freightCost) {
+          toast({
+            title: "Calcule o frete primeiro",
+            description: "É necessário calcular o custo real do frete antes de ajustar o preço",
+            variant: "destructive"
+          });
+          return product;
+        }
+        
         const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
