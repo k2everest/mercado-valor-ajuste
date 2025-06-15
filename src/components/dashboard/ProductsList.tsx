@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +20,7 @@ interface Product {
   availableQuantity?: number;
   soldQuantity?: number;
   freightCost?: number;
+  sellerFreightCost?: number; // New field for seller's actual cost
   freightMethod?: string;
 }
 
@@ -37,7 +37,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        // Use seller's actual freight cost for calculations
+        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
         const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
@@ -49,14 +50,15 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
     toast({
       title: "Preço ajustado!",
-      description: `Frete ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
+      description: `Custo real do frete ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
     });
   };
 
   const adjustAllPrices = (operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.freeShipping) {
-        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        // Use seller's actual freight cost for free shipping products
+        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
         const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
@@ -69,7 +71,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     const freeShippingCount = products.filter(p => p.freeShipping).length;
     toast({
       title: "Preços ajustados em massa!",
-      description: `${freeShippingCount} produtos com frete grátis foram ajustados`,
+      description: `${freeShippingCount} produtos com frete grátis foram ajustados com o custo real do vendedor`,
     });
   };
 
@@ -155,26 +157,31 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
       console.log('Opções de frete recebidas:', data.freightOptions);
 
-      // Encontrar a opção de frete mais barata
+      // Find the cheapest option and prioritize seller cost for free shipping
       const cheapestFreight = data.freightOptions.reduce((min: any, current: any) => 
-        current.price < min.price ? current : min
+        current.sellerCost < min.sellerCost ? current : min
       );
 
-      // Atualizar o produto com o valor do frete
+      // Update product with both customer and seller costs
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           return {
             ...product,
-            freightCost: cheapestFreight.price,
+            freightCost: cheapestFreight.price, // What customer pays
+            sellerFreightCost: cheapestFreight.sellerCost, // What seller actually pays
             freightMethod: cheapestFreight.method
           };
         }
         return product;
       }));
 
+      const costMessage = cheapestFreight.isFreeShipping 
+        ? `${cheapestFreight.method}: Cliente R$ 0,00 | Vendedor R$ ${cheapestFreight.sellerCost.toFixed(2)}`
+        : `${cheapestFreight.method}: R$ ${cheapestFreight.price.toFixed(2)}`;
+
       toast({
         title: "Frete calculado!",
-        description: `${cheapestFreight.method}: R$ ${cheapestFreight.price.toFixed(2)}`,
+        description: costMessage,
       });
 
     } catch (error: any) {
@@ -192,7 +199,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   const adjustPriceWithFreight = (productId: string, operation: 'add' | 'subtract') => {
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        const freightCost = product.freightCost || 25.00; // Fallback para valor padrão
+        // Use seller's actual freight cost
+        const freightCost = product.sellerFreightCost || product.freightCost || 25.00;
         const adjustment = operation === 'add' ? freightCost : -freightCost;
         return {
           ...product,
@@ -203,8 +211,8 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     }));
 
     toast({
-      title: "Preço ajustado com frete!",
-      description: `Frete ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
+      title: "Preço ajustado com custo real do frete!",
+      description: `Custo do vendedor ${operation === 'add' ? 'adicionado ao' : 'subtraído do'} preço`,
     });
   };
 
@@ -258,7 +266,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
               className="flex items-center gap-2"
             >
               <Truck className="h-4 w-4" />
-              {Object.values(loadingFreight).some(Boolean) ? 'Calculando...' : 'Calcular Frete'}
+              {Object.values(loadingFreight).some(Boolean) ? 'Calculando...' : 'Calcular Custo Real'}
             </Button>
           </div>
         </CardContent>
@@ -280,7 +288,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
               className="flex items-center gap-2"
             >
               <Minus className="h-4 w-4" />
-              Subtrair Frete de Todos
+              Subtrair Custo Real do Frete
             </Button>
             <Button
               onClick={() => adjustAllPrices('add')}
@@ -288,7 +296,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              Somar Frete a Todos
+              Somar Custo Real do Frete
             </Button>
             <Button
               onClick={exportToCSV}
@@ -344,12 +352,15 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                             R$ {product.originalPrice.toFixed(2)}
                           </span>
                         </div>
-                        {product.freightCost && (
+                        {product.sellerFreightCost && (
                           <div className="text-sm text-gray-600">
-                            <span className="font-medium">Frete ({product.freightMethod}):</span>{' '}
-                            <span className="text-lg font-bold text-orange-600">
-                              R$ {product.freightCost.toFixed(2)}
+                            <span className="font-medium">Custo Real do Frete ({product.freightMethod}):</span>{' '}
+                            <span className="text-lg font-bold text-red-600">
+                              R$ {product.sellerFreightCost.toFixed(2)}
                             </span>
+                            {product.freeShipping && (
+                              <span className="text-xs text-orange-600 ml-1">(Vendedor paga)</span>
+                            )}
                           </div>
                         )}
                         {product.adjustedPrice && (
@@ -367,7 +378,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                         </Badge>
                         {product.freeShipping && (
                           <Badge variant="secondary">
-                            ✅ Frete Grátis
+                            ✅ Frete Grátis (Vendedor Paga)
                           </Badge>
                         )}
                         {product.availableQuantity !== undefined && (
@@ -394,10 +405,10 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                     className="flex items-center gap-1"
                   >
                     <Truck className="h-4 w-4" />
-                    {loadingFreight[product.id] ? 'Calculando...' : 'Calcular Frete'}
+                    {loadingFreight[product.id] ? 'Calculando...' : 'Calcular Custo Real'}
                   </Button>
                   
-                  {product.freightCost && (
+                  {product.sellerFreightCost && (
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -406,7 +417,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                         className="flex items-center gap-1"
                       >
                         <Minus className="h-4 w-4" />
-                        Subtrair Frete
+                        Subtrair Custo Real
                       </Button>
                       <Button
                         size="sm"
@@ -415,7 +426,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
                         className="flex items-center gap-1"
                       >
                         <Plus className="h-4 w-4" />
-                        Somar Frete
+                        Somar Custo Real
                       </Button>
                     </div>
                   )}

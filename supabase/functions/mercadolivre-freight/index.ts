@@ -67,14 +67,15 @@ serve(async (req) => {
 
         if (!calcResponse.ok) {
           // If all else fails, provide a basic calculation based on free shipping status
-          const baseFreight = product.shipping?.free_shipping ? 0 : 25.00
+          const baseFreight = product.shipping?.free_shipping ? 25.00 : 25.00 // Default seller cost
           
           return new Response(
             JSON.stringify({ 
               freightOptions: [{
-                method: product.shipping?.free_shipping ? 'Frete Grátis' : 'Frete Padrão',
+                method: product.shipping?.free_shipping ? 'Frete Grátis (Custo do Vendedor)' : 'Frete Padrão',
                 carrier: 'Mercado Livre',
                 price: baseFreight,
+                sellerCost: baseFreight, // Always show seller cost
                 deliveryTime: '5-7 dias úteis'
               }],
               zipCode,
@@ -92,11 +93,13 @@ serve(async (req) => {
           method: option.name || 'Frete Padrão',
           carrier: option.shipping_method_id || 'Mercado Livre',
           price: option.cost || 25.00,
+          sellerCost: option.cost || 25.00, // For calculated options, seller pays this cost
           deliveryTime: option.estimated_delivery_time || 'Não informado'
         })) || [{
           method: 'Frete Padrão',
           carrier: 'Mercado Livre',
           price: 25.00,
+          sellerCost: 25.00,
           deliveryTime: '5-7 dias úteis'
         }]
 
@@ -113,17 +116,28 @@ serve(async (req) => {
       const shippingData = await shippingResponse.json()
       console.log('Shipping options:', shippingData)
 
-      // Transform shipping options data
-      const freightOptions = shippingData.options?.map((option: any) => ({
-        method: option.name || 'Frete Padrão',
-        carrier: option.shipping_method_id || 'Mercado Livre',
-        price: option.cost || (product.shipping?.free_shipping ? 0 : 25.00),
-        deliveryTime: option.estimated_delivery_time || 'Não informado'
-      })) || [{
-        method: product.shipping?.free_shipping ? 'Frete Grátis' : 'Frete Padrão',
+      // Transform shipping options data - CAPTURE SELLER'S ACTUAL COSTS
+      const freightOptions = shippingData.options?.map((option: any) => {
+        // For free shipping products, use base_cost (what seller actually pays)
+        // For paid shipping, use the customer cost
+        const sellerCost = option.base_cost || option.cost || 25.00
+        const customerCost = option.cost || (product.shipping?.free_shipping ? 0 : sellerCost)
+        
+        return {
+          method: option.name || 'Frete Padrão',
+          carrier: option.shipping_method_id || 'Mercado Livre',
+          price: customerCost, // What customer pays (0 for free shipping)
+          sellerCost: sellerCost, // What seller actually pays (real cost)
+          deliveryTime: option.estimated_delivery_time || 'Não informado',
+          isFreeShipping: customerCost === 0
+        }
+      }) || [{
+        method: product.shipping?.free_shipping ? 'Frete Grátis (Custo do Vendedor)' : 'Frete Padrão',
         carrier: 'Mercado Livre',
         price: product.shipping?.free_shipping ? 0 : 25.00,
-        deliveryTime: '5-7 dias úteis'
+        sellerCost: 25.00, // Default seller cost
+        deliveryTime: '5-7 dias úteis',
+        isFreeShipping: product.shipping?.free_shipping || false
       }]
 
       return new Response(
