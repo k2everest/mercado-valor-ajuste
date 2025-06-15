@@ -82,7 +82,8 @@ serve(async (req) => {
           // Filter for "Mercado Envios Padrão" or similar standard shipping methods
           const standardShippingOptions = directShippingData.options.filter((option: any) => {
             const optionName = (option.name || '').toLowerCase()
-            const shippingMethod = (option.shipping_method_id || '').toLowerCase()
+            // Convert shipping_method_id to string before calling toLowerCase
+            const shippingMethod = String(option.shipping_method_id || '').toLowerCase()
             
             // Look for standard Mercado Envios, not Flex
             const isStandardShipping = 
