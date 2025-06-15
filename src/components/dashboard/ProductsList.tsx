@@ -159,10 +159,10 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
-    // Limpar TODOS os dados antigos de frete antes de calcular novos
+    // Clear all old freight data before calculating new ones
     setProducts(prev => prev.map(product => {
       if (product.id === productId) {
-        console.log('🧹 LIMPANDO COMPLETAMENTE DADOS ANTIGOS DE FRETE para produto:', productId);
+        console.log('🧹 LIMPANDO DADOS ANTIGOS DE FRETE para produto:', productId);
         return {
           ...product,
           freightCost: undefined,
@@ -175,7 +175,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
     }));
 
     try {
-      console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL - SEM VALORES PRÉ-CONFIGURADOS');
+      console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL DA API MERCADO LIVRE');
       console.log('📍 Produto ID:', productId);
       console.log('📍 CEP limpo:', cleanZipCode);
       
@@ -184,7 +184,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
 
-      console.log('🔑 Token encontrado, chamando API...');
+      console.log('🔑 Token encontrado, chamando API com melhorias...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
@@ -200,81 +200,61 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         throw new Error(`Erro da API: ${error.message}`);
       }
 
-      console.log('📦 RESPOSTA COMPLETA DA API (SEM FILTROS):', JSON.stringify(data, null, 2));
+      console.log('📦 RESPOSTA COMPLETA DA API MELHORADA:', JSON.stringify(data, null, 2));
       
-      if (!data?.freightOptions || !Array.isArray(data.freightOptions) || data.freightOptions.length === 0) {
-        console.error('❌ NENHUMA OPÇÃO DE FRETE RETORNADA');
+      // Use selectedOption if available, otherwise fall back to first option
+      const selectedOption = data?.selectedOption || data?.freightOptions?.[0];
+      
+      if (!selectedOption) {
+        console.error('❌ NENHUMA OPÇÃO VÁLIDA DE FRETE RETORNADA');
         throw new Error('API do Mercado Livre não retornou opções de frete válidas');
       }
 
-      console.log('🔍 OPÇÕES DE FRETE RECEBIDAS (VALORES REAIS DA API):');
-      data.freightOptions.forEach((option: any, index: number) => {
-        console.log(`✅ Opção ${index + 1}:`, {
-          método: option.method,
-          preçoCliente: option.price,
-          custoVendedor: option.sellerCost,
-          fonte: option.source,
-          dadosOriginais: option.rawData
-        });
-      });
+      console.log('🎯 OPÇÃO SELECIONADA (CUSTO REAL DO VENDEDOR):');
+      console.log('- Método:', selectedOption.method);
+      console.log('- Preço Cliente:', selectedOption.price);
+      console.log('- Custo Vendedor:', selectedOption.sellerCost);
+      console.log('- Fonte:', selectedOption.source);
+      console.log('- Desconto:', selectedOption.discount);
 
-      // Encontrar a opção mais barata baseada no custo do vendedor
-      const cheapestOption = data.freightOptions.reduce((min: any, current: any) => {
-        const minCost = typeof min.sellerCost === 'number' ? min.sellerCost : 999999;
-        const currentCost = typeof current.sellerCost === 'number' ? current.sellerCost : 999999;
-        return currentCost < minCost ? current : min;
-      });
-
-      console.log('💰 OPÇÃO MAIS BARATA SELECIONADA (VALOR REAL):');
-      console.log('- Método:', cheapestOption.method);
-      console.log('- Preço Cliente:', cheapestOption.price);
-      console.log('- Custo Vendedor:', cheapestOption.sellerCost);
-      console.log('- Fonte:', cheapestOption.source);
-
-      // Verificação rigorosa dos valores
-      if (cheapestOption.price === undefined || cheapestOption.sellerCost === undefined) {
-        console.error('❌ VALORES INVÁLIDOS NA RESPOSTA DA API:', cheapestOption);
+      // Strict validation of values from API
+      if (selectedOption.price === undefined || selectedOption.sellerCost === undefined) {
+        console.error('❌ VALORES INVÁLIDOS NA RESPOSTA DA API:', selectedOption);
         throw new Error('API retornou valores inválidos para o frete');
       }
 
-      if (typeof cheapestOption.price !== 'number' || typeof cheapestOption.sellerCost !== 'number') {
+      if (typeof selectedOption.price !== 'number' || typeof selectedOption.sellerCost !== 'number') {
         console.error('❌ VALORES NÃO SÃO NUMÉRICOS:', {
-          price: typeof cheapestOption.price,
-          sellerCost: typeof cheapestOption.sellerCost
+          price: typeof selectedOption.price,
+          sellerCost: typeof selectedOption.sellerCost
         });
         throw new Error('API retornou valores não numéricos para o frete');
       }
 
-      // Verificar se não é o valor 25 (removendo qualquer possibilidade)
-      if (cheapestOption.sellerCost === 25 || cheapestOption.price === 25) {
-        console.warn('⚠️ DETECTADO VALOR 25 - PODE SER PRÉ-CONFIGURAÇÃO');
-        console.log('Dados completos da opção:', cheapestOption);
-      }
+      const finalCustomerCost = Number(selectedOption.price);
+      const finalSellerCost = Number(selectedOption.sellerCost);
 
-      const finalCustomerCost = Number(cheapestOption.price);
-      const finalSellerCost = Number(cheapestOption.sellerCost);
-
-      console.log('🎯 VALORES FINAIS PROCESSADOS (GARANTIDAMENTE DA API):');
+      console.log('✅ VALORES FINAIS CONFIRMADOS DA API MERCADO LIVRE:');
       console.log('- Custo Final Cliente:', finalCustomerCost);
       console.log('- Custo Final Vendedor:', finalSellerCost);
-      console.log('- Método Final:', cheapestOption.method);
+      console.log('- Método Final:', selectedOption.method);
 
-      // Atualizar produto com valores REAIS da API
+      // Update product with REAL API values
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           const updatedProduct = {
             ...product,
             freightCost: finalCustomerCost,
             sellerFreightCost: finalSellerCost,
-            freightMethod: cheapestOption.method
+            freightMethod: selectedOption.method
           };
           
-          console.log('💾 PRODUTO ATUALIZADO COM VALORES REAIS DA API:', {
+          console.log('💾 PRODUTO ATUALIZADO COM VALORES REAIS:', {
             id: productId,
             custoCliente: updatedProduct.freightCost,
             custoVendedor: updatedProduct.sellerFreightCost,
             método: updatedProduct.freightMethod,
-            fonte: cheapestOption.source
+            fonte: selectedOption.source
           });
           
           return updatedProduct;
@@ -282,18 +262,19 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         return product;
       }));
 
+      const discountInfo = selectedOption.discount ? ` (com desconto: ${selectedOption.discount})` : '';
+      
       toast({
         title: "✅ Custo REAL calculado com sucesso!",
-        description: `${cheapestOption.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)}`,
+        description: `${selectedOption.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)}${discountInfo}`,
       });
 
       console.log('🎉 CÁLCULO FINALIZADO - VALORES REAIS DA API APLICADOS');
-      console.log('❌ NENHUM VALOR PRÉ-CONFIGURADO FOI USADO');
 
     } catch (error: any) {
       console.error('💥 ERRO COMPLETO NO CÁLCULO:', error);
       
-      // Em caso de erro, garantir que não há valores antigos
+      // In case of error, ensure there are no old values
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           return {

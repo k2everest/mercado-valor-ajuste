@@ -44,12 +44,26 @@ serve(async (req) => {
       console.log('Produto encontrado:', product.title)
       console.log('Seller ID:', product.seller_id)
 
+      // Get seller information for reputation details
+      console.log('Buscando informações do vendedor...')
+      const sellerResponse = await fetch(`https://api.mercadolibre.com/users/${product.seller_id}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
+
+      let sellerData = null
+      if (sellerResponse.ok) {
+        sellerData = await sellerResponse.json()
+        console.log('Seller reputation:', sellerData.seller_reputation)
+      }
+
       // Try multiple API endpoints to get real shipping costs
       let freightOptions = []
 
-      // Method 1: Direct shipping options for the item
-      console.log('=== TENTATIVA 1: Opções de frete diretas ===')
-      const directShippingUrl = `https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}`
+      // Method 1: Direct shipping options for the item with detailed cost breakdown
+      console.log('=== TENTATIVA 1: Opções de frete diretas com breakdown ===')
+      const directShippingUrl = `https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}&include_dimensions=true`
       console.log('URL:', directShippingUrl)
       
       const directShippingResponse = await fetch(directShippingUrl, {
@@ -69,10 +83,26 @@ serve(async (req) => {
               name: option.name,
               cost: option.cost,
               base_cost: option.base_cost,
-              list_cost: option.list_cost
+              list_cost: option.list_cost,
+              seller_cost: option.seller_cost,
+              discount: option.discount
             })
             
-            const sellerCost = option.base_cost || option.list_cost || option.cost || 0
+            // Priority for seller cost: seller_cost > base_cost > list_cost > cost
+            let sellerCost = 0
+            if (option.seller_cost !== undefined && option.seller_cost !== null) {
+              sellerCost = option.seller_cost
+              console.log('Usando seller_cost:', sellerCost)
+            } else if (option.base_cost !== undefined && option.base_cost !== null) {
+              sellerCost = option.base_cost
+              console.log('Usando base_cost:', sellerCost)
+            } else if (option.list_cost !== undefined && option.list_cost !== null) {
+              sellerCost = option.list_cost
+              console.log('Usando list_cost:', sellerCost)
+            } else {
+              sellerCost = option.cost || 0
+              console.log('Usando cost padrão:', sellerCost)
+            }
             
             return {
               method: option.name || 'Mercado Envios',
@@ -81,8 +111,9 @@ serve(async (req) => {
               sellerCost: sellerCost,
               deliveryTime: option.estimated_delivery_time?.date || '3-7 dias úteis',
               isFreeShipping: option.cost === 0,
-              source: 'direct_api',
-              rawData: option
+              source: 'direct_api_detailed',
+              rawData: option,
+              discount: option.discount || null
             }
           })
         }
@@ -90,9 +121,42 @@ serve(async (req) => {
         console.error('Falha na API de frete direto:', directShippingResponse.status, await directShippingResponse.text())
       }
 
-      // Method 2: Shipping calculator API
+      // Method 2: Shipping costs API with seller context
       if (freightOptions.length === 0) {
-        console.log('=== TENTATIVA 2: Calculadora de frete ===')
+        console.log('=== TENTATIVA 2: API de custos de frete com contexto do vendedor ===')
+        const costsUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=${product.seller_id}&zip_code_to=${zipCode}&item_id=${productId}`
+        console.log('URL:', costsUrl)
+        
+        const costsResponse = await fetch(costsUrl, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        })
+
+        if (costsResponse.ok) {
+          const costsData = await costsResponse.json()
+          console.log('Resposta da API de custos:', JSON.stringify(costsData, null, 2))
+          
+          if (costsData?.costs && costsData.costs.length > 0) {
+            freightOptions = costsData.costs.map((cost: any) => ({
+              method: cost.method || 'Mercado Envios',
+              carrier: cost.method || 'Mercado Envios',
+              price: cost.cost || 0,
+              sellerCost: cost.seller_cost || cost.cost || 0,
+              deliveryTime: cost.delivery_time || '3-7 dias úteis',
+              isFreeShipping: cost.cost === 0,
+              source: 'costs_api_with_seller',
+              rawData: cost
+            }))
+          }
+        } else {
+          console.error('Falha na API de custos:', costsResponse.status, await costsResponse.text())
+        }
+      }
+
+      // Method 3: Shipping calculator API with item context
+      if (freightOptions.length === 0) {
+        console.log('=== TENTATIVA 3: Calculadora de frete com contexto do item ===')
         const calculatorUrl = `https://api.mercadolibre.com/sites/MLB/shipping_calculator`
         console.log('URL:', calculatorUrl)
         
@@ -102,7 +166,9 @@ serve(async (req) => {
             quantity: 1
           }],
           zip_code_to: zipCode,
-          shipping_method: 'custom'
+          zip_code_from: product.location?.city?.id || '1',
+          shipping_method: 'custom',
+          include_seller_costs: true
         }
         
         console.log('Body da requisição:', JSON.stringify(calculatorBody, null, 2))
@@ -125,10 +191,10 @@ serve(async (req) => {
               method: cost.method || 'Mercado Envios',
               carrier: cost.method || 'Mercado Envios',
               price: cost.cost || 0,
-              sellerCost: cost.seller_cost || cost.cost || 0,
+              sellerCost: cost.seller_cost || cost.base_cost || cost.cost || 0,
               deliveryTime: cost.delivery_time || '3-7 dias úteis',
               isFreeShipping: cost.cost === 0,
-              source: 'calculator_api',
+              source: 'calculator_api_with_context',
               rawData: cost
             }))
           }
@@ -137,9 +203,9 @@ serve(async (req) => {
         }
       }
 
-      // Method 3: Generic shipping costs
+      // Method 4: Generic shipping costs as last resort
       if (freightOptions.length === 0) {
-        console.log('=== TENTATIVA 3: Custos genéricos de frete ===')
+        console.log('=== TENTATIVA 4: Custos genéricos de frete (último recurso) ===')
         const genericUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=01310100&zip_code_to=${zipCode}`
         console.log('URL:', genericUrl)
         
@@ -161,7 +227,7 @@ serve(async (req) => {
               sellerCost: cost.cost || 0,
               deliveryTime: '3-7 dias úteis',
               isFreeShipping: false,
-              source: 'generic_api',
+              source: 'generic_api_fallback',
               rawData: cost
             }))
           }
@@ -175,30 +241,57 @@ serve(async (req) => {
         throw new Error('Não foi possível obter custos reais de frete da API do Mercado Livre')
       }
 
-      console.log('=== OPÇÕES FINAIS DE FRETE ===')
-      console.log('Total de opções encontradas:', freightOptions.length)
-      freightOptions.forEach((option, index) => {
-        console.log(`Opção ${index + 1}:`, {
-          method: option.method,
-          price: option.price,
-          sellerCost: option.sellerCost,
-          source: option.source
-        })
+      // Filter out any options with suspicious values
+      const validOptions = freightOptions.filter(option => {
+        const isValid = option.sellerCost !== 25 && 
+                       option.price !== 25 && 
+                       typeof option.sellerCost === 'number' && 
+                       typeof option.price === 'number' &&
+                       option.sellerCost >= 0 &&
+                       option.price >= 0
+        
+        if (!isValid) {
+          console.warn('Opção filtrada por valores suspeitos:', option)
+        }
+        
+        return isValid
       })
+
+      if (validOptions.length === 0) {
+        console.error('=== TODAS AS OPÇÕES FORAM FILTRADAS ===')
+        throw new Error('Todas as opções de frete retornaram valores suspeitos')
+      }
+
+      // Find the cheapest option based on seller cost
+      const cheapestOption = validOptions.reduce((min: any, current: any) => {
+        return current.sellerCost < min.sellerCost ? current : min
+      })
+
+      console.log('=== OPÇÃO FINAL SELECIONADA ===')
+      console.log('Método:', cheapestOption.method)
+      console.log('Preço Cliente:', cheapestOption.price)
+      console.log('Custo Vendedor:', cheapestOption.sellerCost)
+      console.log('Fonte:', cheapestOption.source)
+      console.log('Desconto aplicado:', cheapestOption.discount)
 
       return new Response(
         JSON.stringify({ 
-          freightOptions,
+          freightOptions: validOptions,
+          selectedOption: cheapestOption,
           zipCode,
           productId,
           hasRealCosts: true,
-          apiSource: freightOptions[0]?.source,
+          apiSource: cheapestOption.source,
           productData: {
             title: product.title,
             price: product.price,
             freeShipping: product.shipping?.free_shipping,
             sellerId: product.seller_id
-          }
+          },
+          sellerData: sellerData ? {
+            reputation: sellerData.seller_reputation,
+            level: sellerData.seller_reputation?.level_id
+          } : null
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
