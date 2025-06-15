@@ -1,4 +1,3 @@
-
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -75,27 +74,43 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0;
       
-      // NOVO MÉTODO DE CÁLCULO MAIS ROBUSTO
-      // Prioridade: list_cost (sem desconto) > base_cost > seller_cost > cost
+      // CÁLCULO MELHORADO: Considera desconto por reputação de forma consistente
       
-      if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
-        // Para frete grátis, o vendedor paga o list_cost (valor original sem promoções)
-        sellerCost = option.list_cost;
-        calculationMethod = 'list_cost_original';
-        console.log(`VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
-      } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-        sellerCost = option.base_cost;
-        calculationMethod = 'base_cost_fallback';
-        console.log(`VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
-      } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
-        sellerCost = option.seller_cost;
-        calculationMethod = 'seller_cost_direto';
-        console.log(`VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
+      // Se existe desconto por reputação (loyal discount), usar o base_cost
+      if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
+        // Para descontos por reputação, o vendedor paga o base_cost (valor original)
+        if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+          sellerCost = option.base_cost;
+          calculationMethod = 'base_cost_com_desconto_reputacao';
+          console.log(`VENDEDOR PAGA BASE_COST (com desconto reputação): R$ ${sellerCost}`);
+        } else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+          sellerCost = option.list_cost;
+          calculationMethod = 'list_cost_com_desconto_reputacao';
+          console.log(`VENDEDOR PAGA LIST_COST (com desconto reputação): R$ ${sellerCost}`);
+        } else {
+          sellerCost = option.cost || 0;
+          calculationMethod = 'cost_fallback_com_desconto';
+          console.log(`VENDEDOR PAGA COST (fallback com desconto): R$ ${sellerCost}`);
+        }
       } else {
-        // Last resort - use cost
-        sellerCost = option.cost || 0;
-        calculationMethod = 'cost_last_resort';
-        console.log(`VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
+        // Sem desconto por reputação - usar hierarquia original
+        if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+          sellerCost = option.list_cost;
+          calculationMethod = 'list_cost_original';
+          console.log(`VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
+        } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+          sellerCost = option.base_cost;
+          calculationMethod = 'base_cost_fallback';
+          console.log(`VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
+        } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
+          sellerCost = option.seller_cost;
+          calculationMethod = 'seller_cost_direto';
+          console.log(`VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
+        } else {
+          sellerCost = option.cost || 0;
+          calculationMethod = 'cost_last_resort';
+          console.log(`VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
+        }
       }
     } else {
       // FRETE PAGO PELO COMPRADOR
