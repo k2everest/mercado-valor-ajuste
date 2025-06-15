@@ -18,6 +18,8 @@ serve(async (req) => {
       throw new Error('Access token is required')
     }
 
+    console.log('Fetching user information...')
+
     // Get user information first
     const userResponse = await fetch('https://api.mercadolibre.com/users/me', {
       headers: {
@@ -26,13 +28,17 @@ serve(async (req) => {
     })
 
     if (!userResponse.ok) {
-      throw new Error('Failed to get user information')
+      const errorText = await userResponse.text()
+      console.error('User fetch error:', errorText)
+      throw new Error(`Failed to get user information: ${userResponse.status}`)
     }
 
     const userData = await userResponse.json()
     const userId = userData.id
+    console.log('User ID:', userId)
 
     // Get user's items
+    console.log('Fetching user items...')
     const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=50`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -40,50 +46,57 @@ serve(async (req) => {
     })
 
     if (!itemsResponse.ok) {
-      throw new Error('Failed to fetch products')
+      const errorText = await itemsResponse.text()
+      console.error('Items fetch error:', errorText)
+      throw new Error(`Failed to fetch user items: ${itemsResponse.status}`)
     }
 
     const itemsData = await itemsResponse.json()
     const itemIds = itemsData.results
+    console.log('Found items:', itemIds.length)
 
     if (itemIds.length === 0) {
+      console.log('No active items found')
       return new Response(
         JSON.stringify({ products: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get detailed information for each item (batch request)
-    const detailsResponse = await fetch(`https://api.mercadolibre.com/items?ids=${itemIds.join(',')}`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    })
+    // Get detailed information for each item individually to avoid batch request issues
+    console.log('Fetching item details...')
+    const products = []
+    
+    for (const itemId of itemIds.slice(0, 20)) { // Limit to 20 items to avoid timeouts
+      try {
+        const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        })
 
-    if (!detailsResponse.ok) {
-      throw new Error('Failed to fetch product details')
+        if (itemResponse.ok) {
+          const item = await itemResponse.json()
+          products.push({
+            id: item.id,
+            title: item.title,
+            originalPrice: item.price,
+            status: item.status,
+            freeShipping: item.shipping?.free_shipping || false,
+            permalink: item.permalink,
+            thumbnail: item.thumbnail,
+            availableQuantity: item.available_quantity,
+            soldQuantity: item.sold_quantity,
+          })
+        } else {
+          console.warn(`Failed to fetch item ${itemId}:`, itemResponse.status)
+        }
+      } catch (error) {
+        console.warn(`Error fetching item ${itemId}:`, error.message)
+      }
     }
 
-    const detailsData = await detailsResponse.json()
-    
-    // Transform the data to match our frontend interface
-    const products = detailsData.map((item: any) => {
-      if (item.code === 200 && item.body) {
-        const product = item.body
-        return {
-          id: product.id,
-          title: product.title,
-          originalPrice: product.price,
-          status: product.status,
-          freeShipping: product.shipping?.free_shipping || false,
-          permalink: product.permalink,
-          thumbnail: product.thumbnail,
-          availableQuantity: product.available_quantity,
-          soldQuantity: product.sold_quantity,
-        }
-      }
-      return null
-    }).filter(Boolean)
+    console.log('Successfully processed products:', products.length)
 
     return new Response(
       JSON.stringify({ products }),
