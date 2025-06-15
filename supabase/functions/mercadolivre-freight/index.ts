@@ -170,7 +170,6 @@ serve(async (req) => {
         }
       }
 
-      // REMOVED: No more manual calculation fallback
       if (freightOptions.length === 0) {
         console.error('=== NENHUMA OPÇÃO DE FRETE ENCONTRADA ===')
         throw new Error('Não foi possível obter custos reais de frete da API do Mercado Livre')
