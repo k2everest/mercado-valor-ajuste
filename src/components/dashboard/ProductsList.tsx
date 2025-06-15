@@ -139,10 +139,20 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
   };
 
   const fetchFreightCosts = async (productId: string) => {
-    if (!zipCode) {
+    if (!zipCode || zipCode.trim().length === 0) {
       toast({
-        title: "CEP necessário",
-        description: "Digite um CEP para calcular o frete",
+        title: "❌ CEP obrigatório",
+        description: "Digite um CEP válido para calcular o frete real",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const cleanZipCode = zipCode.replace(/\D/g, '');
+    if (cleanZipCode.length !== 8) {
+      toast({
+        title: "❌ CEP inválido",
+        description: "Digite um CEP com 8 dígitos",
         variant: "destructive"
       });
       return;
@@ -150,38 +160,56 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
 
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
+    // Limpar dados antigos de frete antes de calcular novos
+    setProducts(prev => prev.map(product => {
+      if (product.id === productId) {
+        console.log('🧹 LIMPANDO DADOS ANTIGOS DE FRETE para produto:', productId);
+        return {
+          ...product,
+          freightCost: undefined,
+          sellerFreightCost: undefined,
+          freightMethod: undefined
+        };
+      }
+      return product;
+    }));
+
     try {
-      console.log('🚚 CALCULANDO FRETE REAL - PRODUTO:', productId);
-      console.log('📍 CEP:', zipCode);
+      console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL');
+      console.log('📍 Produto ID:', productId);
+      console.log('📍 CEP limpo:', cleanZipCode);
       
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
 
+      console.log('🔑 Token encontrado, chamando API...');
+
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
           action: 'getShippingCosts',
           productId,
-          zipCode: zipCode.replace(/\D/g, ''),
+          zipCode: cleanZipCode,
           accessToken
         }
       });
 
       if (error) {
-        console.error('❌ ERRO DA API:', error);
-        throw new Error(error.message);
+        console.error('❌ ERRO DA FUNÇÃO SUPABASE:', error);
+        throw new Error(`Erro da API: ${error.message}`);
       }
 
-      console.log('📦 RESPOSTA COMPLETA DA API:', data);
+      console.log('📦 RESPOSTA COMPLETA DA API:', JSON.stringify(data, null, 2));
       
-      if (!data?.freightOptions || data.freightOptions.length === 0) {
-        throw new Error('Nenhuma opção de frete retornada pela API do Mercado Livre');
+      if (!data?.freightOptions || !Array.isArray(data.freightOptions) || data.freightOptions.length === 0) {
+        console.error('❌ NENHUMA OPÇÃO DE FRETE RETORNADA');
+        throw new Error('API do Mercado Livre não retornou opções de frete válidas');
       }
 
-      console.log('🔍 OPÇÕES DE FRETE RECEBIDAS:');
+      console.log('🔍 OPÇÕES DE FRETE RECEBIDAS DA API:');
       data.freightOptions.forEach((option: any, index: number) => {
-        console.log(`Opção ${index + 1}:`, {
+        console.log(`✅ Opção ${index + 1}:`, {
           método: option.method,
           preçoCliente: option.price,
           custoVendedor: option.sellerCost,
@@ -189,29 +217,35 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
         });
       });
 
-      // Buscar a opção mais barata baseada no custo do vendedor
+      // Encontrar a opção mais barata baseada no custo do vendedor
       const cheapestOption = data.freightOptions.reduce((min: any, current: any) => {
-        return current.sellerCost < min.sellerCost ? current : min;
+        return (current.sellerCost || 0) < (min.sellerCost || 999999) ? current : min;
       });
 
-      console.log('✅ OPÇÃO MAIS BARATA SELECIONADA:', {
+      console.log('💰 OPÇÃO MAIS BARATA SELECIONADA:', {
         método: cheapestOption.method,
         preçoCliente: cheapestOption.price,
         custoVendedor: cheapestOption.sellerCost,
         fonte: cheapestOption.source
       });
 
-      // Atualizar produto com custos REAIS da API - SEM valores hardcoded
+      // Verificar se os valores são válidos antes de atualizar
+      if (cheapestOption.price === undefined || cheapestOption.sellerCost === undefined) {
+        console.error('❌ VALORES INVÁLIDOS NA RESPOSTA DA API:', cheapestOption);
+        throw new Error('API retornou valores inválidos para o frete');
+      }
+
+      // Atualizar produto com valores REAIS da API
       setProducts(prev => prev.map(product => {
         if (product.id === productId) {
           const updatedProduct = {
             ...product,
-            freightCost: cheapestOption.price,
-            sellerFreightCost: cheapestOption.sellerCost,
+            freightCost: Number(cheapestOption.price),
+            sellerFreightCost: Number(cheapestOption.sellerCost),
             freightMethod: cheapestOption.method
           };
           
-          console.log('💾 PRODUTO ATUALIZADO COM VALORES REAIS DA API:', {
+          console.log('💾 PRODUTO ATUALIZADO COM VALORES REAIS:', {
             id: productId,
             custoCliente: updatedProduct.freightCost,
             custoVendedor: updatedProduct.sellerFreightCost,
@@ -219,9 +253,10 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
             fonte: cheapestOption.source
           });
           
-          console.log('🔍 VERIFICAÇÃO: Valores que serão exibidos na tela:');
-          console.log('- Custo para o cliente:', updatedProduct.freightCost);
-          console.log('- Custo real do vendedor:', updatedProduct.sellerFreightCost);
+          // Verificação final dos valores que serão exibidos
+          console.log('🎯 VALORES FINAIS PARA EXIBIÇÃO:');
+          console.log('- Custo cliente R$:', updatedProduct.freightCost);
+          console.log('- Custo vendedor R$:', updatedProduct.sellerFreightCost);
           console.log('- Método:', updatedProduct.freightMethod);
           
           return updatedProduct;
@@ -230,18 +265,31 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
       }));
 
       toast({
-        title: "✅ Custo REAL calculado!",
-        description: `${cheapestOption.method}: Cliente R$ ${cheapestOption.price.toFixed(2)} | Vendedor R$ ${cheapestOption.sellerCost.toFixed(2)}`,
+        title: "✅ Custo REAL calculado com sucesso!",
+        description: `${cheapestOption.method}: Cliente R$ ${Number(cheapestOption.price).toFixed(2)} | Vendedor R$ ${Number(cheapestOption.sellerCost).toFixed(2)}`,
       });
 
-      console.log('🎯 CÁLCULO FINALIZADO - VALORES REAIS APLICADOS');
+      console.log('🎉 CÁLCULO FINALIZADO COM SUCESSO - VALORES REAIS APLICADOS');
 
     } catch (error: any) {
-      console.error('💥 ERRO NO CÁLCULO:', error);
+      console.error('💥 ERRO COMPLETO NO CÁLCULO:', error);
+      
+      // Em caso de erro, não manter valores antigos
+      setProducts(prev => prev.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            freightCost: undefined,
+            sellerFreightCost: undefined,
+            freightMethod: undefined
+          };
+        }
+        return product;
+      }));
       
       toast({
-        title: "Erro ao calcular frete",
-        description: error.message,
+        title: "❌ Erro ao calcular frete real",
+        description: `Erro: ${error.message}`,
         variant: "destructive"
       });
     } finally {
@@ -277,7 +325,7 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
           <div className="flex gap-4 items-end">
             <div className="flex-1">
               <label htmlFor="zipcode" className="block text-sm font-medium mb-2">
-                CEP de Destino
+                CEP de Destino (obrigatório)
               </label>
               <Input
                 id="zipcode"
@@ -289,6 +337,14 @@ export const ProductsList = ({ products: initialProducts }: ProductsListProps) =
             </div>
             <Button
               onClick={() => {
+                if (!zipCode || zipCode.trim().length === 0) {
+                  toast({
+                    title: "❌ CEP obrigatório",
+                    description: "Digite um CEP válido para calcular o frete real",
+                    variant: "destructive"
+                  });
+                  return;
+                }
                 products.forEach(product => {
                   if (!loadingFreight[product.id]) {
                     fetchFreightCosts(product.id);
