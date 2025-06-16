@@ -113,9 +113,7 @@ export const Dashboard = () => {
   if (!isConnected) {
     return (
       <div className="max-w-7xl mx-auto p-6">
-        <MercadoLibreConnection 
-          onConnectionChange={handleConnectionChange}
-        />
+        <MercadoLibreConnection />
       </div>
     );
   }
