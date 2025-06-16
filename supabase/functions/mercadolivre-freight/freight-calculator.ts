@@ -1,3 +1,4 @@
+
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -77,25 +78,33 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0;
       
-      // CORREÇÃO PARA DESCONTO POR REPUTAÇÃO
-      // Se existe desconto por reputação (loyal discount), usar o base_cost
+      // CORREÇÃO CRUCIAL PARA DESCONTO POR REPUTAÇÃO
+      // Quando há desconto por reputação, o vendedor SEMPRE paga o base_cost (valor antes do desconto)
       if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
-        // Para descontos por reputação, o vendedor paga o base_cost (valor original antes do desconto)
+        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Usando base_cost');
+        
+        // PRIORIDADE 1: base_cost (valor real que o vendedor paga antes do desconto)
         if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
           sellerCost = option.base_cost;
           calculationMethod = 'base_cost_com_desconto_reputacao';
-          console.log(`VENDEDOR PAGA BASE_COST (com desconto reputação): R$ ${sellerCost}`);
-        } else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+          console.log(`VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
+        } 
+        // FALLBACK: Se não tem base_cost, usar list_cost
+        else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
           sellerCost = option.list_cost;
           calculationMethod = 'list_cost_com_desconto_reputacao';
-          console.log(`VENDEDOR PAGA LIST_COST (com desconto reputação): R$ ${sellerCost}`);
-        } else {
+          console.log(`VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
+        } 
+        // ÚLTIMO RECURSO: usar cost mesmo com desconto
+        else {
           sellerCost = option.cost || 0;
           calculationMethod = 'cost_fallback_com_desconto';
-          console.log(`VENDEDOR PAGA COST (fallback com desconto): R$ ${sellerCost}`);
+          console.log(`VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
         }
       } else {
-        // Sem desconto por reputação - usar hierarquia original
+        // SEM DESCONTO POR REPUTAÇÃO - usar hierarquia normal
+        console.log('📋 SEM DESCONTO POR REPUTAÇÃO - Usando hierarquia normal');
+        
         if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
           sellerCost = option.list_cost;
           calculationMethod = 'list_cost_original';

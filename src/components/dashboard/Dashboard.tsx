@@ -1,82 +1,172 @@
 
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ProductsList } from "./ProductsList";
-import { MercadoLibreConnection } from "./MercadoLibreConnection";
-import { SettingsPanel } from "./SettingsPanel";
+import { useState, useEffect } from 'react';
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuth } from "@/hooks/useAuth";
-import { LanguageSelector } from "@/components/ui/LanguageSelector";
-import { Calculator, Settings, LogOut, User } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { MercadoLibreConnection } from "./MercadoLibreConnection";
+import { ProductsList } from "./ProductsList";
+import { SettingsPanel } from "./SettingsPanel";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Package, Settings, ShoppingCart } from "lucide-react";
+
+interface Product {
+  id: string;
+  title: string;
+  originalPrice: number;
+  status: 'active' | 'paused' | 'closed';
+  freeShipping: boolean;
+  adjustedPrice?: number;
+  permalink?: string;
+  thumbnail?: string;
+  availableQuantity?: number;
+  soldQuantity?: number;
+  freightCost?: number;
+  sellerFreightCost?: number;
+  freightMethod?: string;
+}
+
+interface PaginationInfo {
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
 
 export const Dashboard = () => {
   const [isConnected, setIsConnected] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [loading, setLoading] = useState(false);
   const { t } = useLanguage();
-  const { user, signOut } = useAuth();
 
-  const handleLogout = async () => {
-    await signOut();
+  useEffect(() => {
+    const accessToken = localStorage.getItem('ml_access_token');
+    if (accessToken) {
+      setIsConnected(true);
+      loadProducts();
+    }
+  }, []);
+
+  const loadProducts = async () => {
+    setLoading(true);
+    try {
+      const accessToken = localStorage.getItem('ml_access_token');
+      if (!accessToken) {
+        throw new Error('Token de acesso não encontrado');
+      }
+
+      console.log('Loading initial products...');
+
+      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
+        body: { 
+          accessToken,
+          limit: 20,
+          offset: 0
+        }
+      });
+
+      if (error) throw error;
+
+      console.log('Products loaded:', data.products.length);
+      console.log('Pagination info:', data.pagination);
+
+      setProducts(data.products || []);
+      setPagination(data.pagination || null);
+
+      toast({
+        title: "✅ Produtos carregados!",
+        description: `${data.products.length} produtos importados com sucesso`,
+      });
+
+    } catch (error: any) {
+      console.error('Error loading products:', error);
+      toast({
+        title: "❌ Erro ao carregar produtos",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleConnection = (importedProducts: any[]) => {
-    setProducts(importedProducts);
-    setIsConnected(true);
+  const handleConnectionChange = (connected: boolean) => {
+    setIsConnected(connected);
+    if (connected) {
+      loadProducts();
+    } else {
+      setProducts([]);
+      setPagination(null);
+    }
   };
+
+  const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
+    console.log('Dashboard handleLoadMore called:', { 
+      newProductsCount: newProducts.length, 
+      newPagination 
+    });
+    setProducts(newProducts);
+    setPagination(newPagination);
+  };
+
+  if (!isConnected) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <MercadoLibreConnection 
+          onConnectionChange={handleConnectionChange}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <Calculator className="h-8 w-8 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900">MercadoValor</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <User className="h-4 w-4" />
-              <span>{user?.email}</span>
-            </div>
-            <LanguageSelector />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              {t('dashboard.settings')}
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              {t('dashboard.logout')}
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('dashboard.title')}</h2>
-          <p className="text-gray-600">
-            Gerencie seus produtos e ajuste preços automaticamente
-          </p>
-        </div>
-
-        {showSettings && (
-          <div className="mb-8">
-            <SettingsPanel />
-          </div>
-        )}
-
-        {!isConnected ? (
-          <MercadoLibreConnection onConnect={handleConnection} />
-        ) : (
-          <ProductsList products={products} />
-        )}
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          {t('dashboard.title')}
+        </h1>
+        <p className="text-gray-600">
+          {t('dashboard.subtitle')}
+        </p>
       </div>
+
+      <Tabs defaultValue="products" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="products" className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Produtos
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Configurações
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products">
+          {loading ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-pulse" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando produtos...</h3>
+                <p className="text-gray-600">
+                  Buscando seus produtos do Mercado Livre...
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <ProductsList 
+              products={products} 
+              pagination={pagination}
+              onLoadMore={handleLoadMore}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <SettingsPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
