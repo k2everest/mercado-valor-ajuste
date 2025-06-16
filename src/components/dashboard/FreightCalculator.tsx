@@ -46,7 +46,7 @@ export const FreightCalculator = ({
       return;
     }
 
-    setLoadingFreight(prev => ({ ...prev, [productId]: true }));
+    setLoadingFreight({ ...loadingFreight, [productId]: true });
 
     try {
       console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL DA API MERCADO LIVRE');
@@ -136,7 +136,7 @@ export const FreightCalculator = ({
         variant: "destructive"
       });
     } finally {
-      setLoadingFreight(prev => ({ ...prev, [productId]: false }));
+      setLoadingFreight({ ...loadingFreight, [productId]: false });
     }
   };
 

@@ -9,29 +9,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Package, Settings, ShoppingCart } from "lucide-react";
-
-interface Product {
-  id: string;
-  title: string;
-  originalPrice: number;
-  status: 'active' | 'paused' | 'closed';
-  freeShipping: boolean;
-  adjustedPrice?: number;
-  permalink?: string;
-  thumbnail?: string;
-  availableQuantity?: number;
-  soldQuantity?: number;
-  freightCost?: number;
-  sellerFreightCost?: number;
-  freightMethod?: string;
-}
-
-interface PaginationInfo {
-  total: number;
-  offset: number;
-  limit: number;
-  hasMore: boolean;
-}
+import { Product, PaginationInfo } from './types';
 
 export const Dashboard = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -101,6 +79,11 @@ export const Dashboard = () => {
     }
   };
 
+  const handleConnect = (newProducts: Product[]) => {
+    setProducts(newProducts);
+    setIsConnected(true);
+  };
+
   const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
     console.log('Dashboard handleLoadMore called:', { 
       newProductsCount: newProducts.length, 
@@ -113,7 +96,7 @@ export const Dashboard = () => {
   if (!isConnected) {
     return (
       <div className="max-w-7xl mx-auto p-6">
-        <MercadoLibreConnection />
+        <MercadoLibreConnection onConnect={handleConnect} />
       </div>
     );
   }
