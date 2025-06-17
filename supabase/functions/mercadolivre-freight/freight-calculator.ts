@@ -33,8 +33,7 @@ export class FreightCalculator {
       const productHasFreeShipping = product.shipping?.free_shipping === true;
       const optionCost = Number(option.cost) || 0;
       
-      // If product has free shipping AND option cost is 0, then seller pays
-      // If product doesn't have free shipping OR option cost > 0, then buyer pays
+      // Free shipping only if product declares it AND option cost is 0
       const isReallyFreeShipping = productHasFreeShipping && optionCost === 0;
       
       console.log('Produto tem frete grátis:', productHasFreeShipping);
@@ -172,53 +171,63 @@ export class FreightCalculator {
   }
 
   static selectBestOption(options: ProcessedFreightOption[]): ProcessedFreightOption {
-    // Prioritize Mercado Envios Padrão first
-    const mercadoEnviosPadraoOptions = options.filter(option => option.isMercadoEnviosPadrao);
+    console.log(`🔍 SELECIONANDO MELHOR OPÇÃO ENTRE ${options.length} opções válidas`);
     
-    console.log(`Opções Mercado Envios Padrão encontradas: ${mercadoEnviosPadraoOptions.length}`);
+    // NOVA LÓGICA: Para produtos SEM frete grátis, escolher a opção com MAIOR CUSTO
+    // Isso garante que pegamos o custo real que o comprador vai pagar
+    const freeShippingOptions = options.filter(option => option.isFreeShipping);
+    const paidShippingOptions = options.filter(option => !option.isFreeShipping);
     
-    if (mercadoEnviosPadraoOptions.length > 0) {
-      console.log('Priorizando Mercado Envios Padrão');
+    console.log(`Opções com frete grátis: ${freeShippingOptions.length}`);
+    console.log(`Opções com frete pago: ${paidShippingOptions.length}`);
+    
+    // Se há opções com frete grátis, priorizar Mercado Envios Padrão entre elas
+    if (freeShippingOptions.length > 0) {
+      console.log('📦 PRIORIZANDO FRETE GRÁTIS');
       
-      // Among Mercado Envios Padrão options, select the one with lowest cost for the payer
-      return mercadoEnviosPadraoOptions.reduce((best: any, current: any) => {
-        console.log(`Comparando ME Padrão: ${current.method} (vendedor: R$ ${current.sellerCost}, comprador: R$ ${current.buyerCost}) vs ${best.method} (vendedor: R$ ${best.sellerCost}, comprador: R$ ${best.buyerCost})`);
-        
-        if (current.paidBy === 'vendedor' && best.paidBy === 'vendedor') {
+      const mercadoEnviosPadraoFree = freeShippingOptions.filter(option => option.isMercadoEnviosPadrao);
+      
+      if (mercadoEnviosPadraoFree.length > 0) {
+        console.log('✅ Encontrado Mercado Envios Padrão com frete grátis');
+        return mercadoEnviosPadraoFree.reduce((best: any, current: any) => {
           return current.sellerCost < best.sellerCost ? current : best;
-        }
-        
-        if (current.paidBy === 'comprador' && best.paidBy === 'comprador') {
-          return current.buyerCost < best.buyerCost ? current : best;
-        }
-        
-        // Prefer seller-paid over buyer-paid
-        return current.paidBy === 'vendedor' ? current : best;
+        });
+      }
+      
+      return freeShippingOptions.reduce((best: any, current: any) => {
+        return current.sellerCost < best.sellerCost ? current : best;
       });
     }
     
-    // If no Mercado Envios Padrão, select from all options
-    console.log(`Selecionando entre todas as ${options.length} opções`);
+    // Se NÃO há frete grátis, escolher a opção com MAIOR custo (mais realista para o comprador)
+    if (paidShippingOptions.length > 0) {
+      console.log('💰 PRODUTOS SEM FRETE GRÁTIS - Priorizando custo maior (mais realista)');
+      
+      // Primeiro, tentar encontrar Mercado Envios Padrão
+      const mercadoEnviosPadrao = paidShippingOptions.filter(option => option.isMercadoEnviosPadrao);
+      
+      if (mercadoEnviosPadrao.length > 0) {
+        console.log('✅ Encontrado Mercado Envios Padrão pago - usando maior custo');
+        const selectedOption = mercadoEnviosPadrao.reduce((best: any, current: any) => {
+          console.log(`Comparando ME Padrão: ${current.method} (R$ ${current.buyerCost}) vs ${best.method} (R$ ${best.buyerCost})`);
+          return current.buyerCost > best.buyerCost ? current : best;
+        });
+        console.log(`🎯 SELECIONADO ME PADRÃO: ${selectedOption.method} - R$ ${selectedOption.buyerCost}`);
+        return selectedOption;
+      }
+      
+      // Se não há ME Padrão, pegar a opção com maior custo entre todas
+      const selectedOption = paidShippingOptions.reduce((best: any, current: any) => {
+        console.log(`Comparando: ${current.method} (R$ ${current.buyerCost}) vs ${best.method} (R$ ${best.buyerCost})`);
+        return current.buyerCost > best.buyerCost ? current : best;
+      });
+      
+      console.log(`🎯 SELECIONADO (maior custo): ${selectedOption.method} - R$ ${selectedOption.buyerCost}`);
+      return selectedOption;
+    }
     
-    return options.reduce((best: any, current: any) => {
-      console.log(`Comparando: ${current.method} (vendedor: R$ ${current.sellerCost}, comprador: R$ ${current.buyerCost}) vs ${best.method} (vendedor: R$ ${best.sellerCost}, comprador: R$ ${best.buyerCost})`);
-      
-      // For seller-paid shipping, choose lowest seller cost
-      if (current.paidBy === 'vendedor' && best.paidBy === 'vendedor') {
-        return current.sellerCost < best.sellerCost ? current : best;
-      }
-      
-      // For buyer-paid shipping, choose lowest buyer cost
-      if (current.paidBy === 'comprador' && best.paidBy === 'comprador') {
-        return current.buyerCost < best.buyerCost ? current : best;
-      }
-      
-      // Prefer seller-paid over buyer-paid
-      if (current.paidBy === 'vendedor' && best.paidBy === 'comprador') {
-        return current;
-      }
-      
-      return best;
-    });
+    // Fallback: retornar primeira opção se nenhuma lógica acima funcionou
+    console.warn('⚠️ FALLBACK: Usando primeira opção disponível');
+    return options[0];
   }
 }
