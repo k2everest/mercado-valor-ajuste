@@ -19,20 +19,60 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
     setConnecting(true);
     
     try {
-      console.log('Iniciando conexão com Mercado Livre...');
+      console.log('🔄 Iniciando conexão com Mercado Livre...');
+      
+      // Check if we have a stored token first
+      const storedToken = localStorage.getItem('ml_access_token');
+      if (storedToken) {
+        console.log('🔑 Token encontrado, testando validade...');
+        
+        try {
+          const { data: productsData, error: productsError } = await supabase.functions.invoke('mercadolivre-products', {
+            body: { accessToken: storedToken, limit: 1, offset: 0 }
+          });
+
+          if (!productsError) {
+            console.log('✅ Token válido, carregando produtos...');
+            
+            // Token is valid, load products
+            const { data: allProductsData, error: allProductsError } = await supabase.functions.invoke('mercadolivre-products', {
+              body: { accessToken: storedToken }
+            });
+
+            if (allProductsError) {
+              throw new Error(`Erro ao buscar produtos: ${allProductsError.message}`);
+            }
+
+            toast({
+              title: "✅ Reconectado com sucesso!",
+              description: `${allProductsData.products?.length || 0} produtos importados do Mercado Livre`,
+            });
+
+            onConnect(allProductsData.products || []);
+            setConnecting(false);
+            return;
+          } else if (productsError.message?.includes('INVALID_TOKEN')) {
+            console.log('🔄 Token inválido, removendo e solicitando nova autenticação...');
+            localStorage.removeItem('ml_access_token');
+          }
+        } catch (error: any) {
+          console.log('🔄 Erro ao testar token, solicitando nova autenticação...');
+          localStorage.removeItem('ml_access_token');
+        }
+      }
       
       // Generate a random state for security
       const state = Math.random().toString(36).substring(2, 15);
       localStorage.setItem('ml_oauth_state', state);
 
       // Get authorization URL from edge function
-      console.log('Solicitando URL de autorização...');
+      console.log('🔗 Solicitando URL de autorização...');
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
         body: { action: 'getAuthUrl', state }
       });
 
       if (authError) {
-        console.error('Erro ao obter URL de autorização:', authError);
+        console.error('❌ Erro ao obter URL de autorização:', authError);
         throw new Error(`Erro na autorização: ${authError.message}`);
       }
 
@@ -40,7 +80,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         throw new Error('URL de autorização não recebida');
       }
 
-      console.log('URL de autorização recebida, abrindo janela...');
+      console.log('🌐 URL de autorização recebida, abrindo janela...');
 
       // Open authorization window
       const authWindow = window.open(
@@ -55,17 +95,17 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
 
       // Listen for the callback
       const handleMessage = async (event: MessageEvent) => {
-        console.log('Mensagem recebida:', event.data);
+        console.log('📨 Mensagem recebida:', event.data);
         
         if (event.origin !== window.location.origin) {
-          console.log('Origem inválida, ignorando mensagem');
+          console.log('⚠️ Origem inválida, ignorando mensagem');
           return;
         }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_SUCCESS') {
           const { code, state: returnedState } = event.data;
           
-          console.log('Autorização bem-sucedida, trocando código...');
+          console.log('✅ Autorização bem-sucedida, trocando código...');
           
           // Verify state parameter
           const savedState = localStorage.getItem('ml_oauth_state');
@@ -80,11 +120,11 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
             });
 
             if (tokenError) {
-              console.error('Erro na troca do código:', tokenError);
+              console.error('❌ Erro na troca do código:', tokenError);
               throw new Error(`Erro ao obter token: ${tokenError.message}`);
             }
 
-            console.log('Token obtido com sucesso, buscando produtos...');
+            console.log('🔑 Token obtido com sucesso, buscando produtos...');
 
             // Store access token securely
             localStorage.setItem('ml_access_token', tokenData.access_token);
@@ -95,23 +135,29 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
             });
 
             if (productsError) {
-              console.error('Erro ao buscar produtos:', productsError);
+              console.error('❌ Erro ao buscar produtos:', productsError);
+              
+              if (productsError.message?.includes('INVALID_TOKEN')) {
+                localStorage.removeItem('ml_access_token');
+                throw new Error('Token inválido. Tente conectar novamente.');
+              }
+              
               throw new Error(`Erro ao buscar produtos: ${productsError.message}`);
             }
 
-            console.log('Produtos obtidos:', productsData.products?.length || 0);
+            console.log('📦 Produtos obtidos:', productsData.products?.length || 0);
 
             toast({
-              title: "Conexão realizada com sucesso!",
+              title: "✅ Conexão realizada com sucesso!",
               description: `${productsData.products?.length || 0} produtos importados do Mercado Livre`,
             });
 
             onConnect(productsData.products || []);
             
           } catch (error: any) {
-            console.error('Erro no processamento:', error);
+            console.error('❌ Erro no processamento:', error);
             toast({
-              title: "Erro na conexão",
+              title: "❌ Erro na conexão",
               description: error.message || "Erro ao processar autenticação",
               variant: "destructive"
             });
@@ -124,9 +170,9 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_ERROR') {
-          console.error('Erro na autorização:', event.data.error);
+          console.error('❌ Erro na autorização:', event.data.error);
           toast({
-            title: "Erro na conexão",
+            title: "❌ Erro na conexão",
             description: event.data.error || 'Falha na autenticação',
             variant: "destructive"
           });
@@ -142,7 +188,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       // Check if window was closed manually
       const checkClosed = setInterval(() => {
         if (authWindow?.closed) {
-          console.log('Janela fechada pelo usuário');
+          console.log('🚪 Janela fechada pelo usuário');
           clearInterval(checkClosed);
           window.removeEventListener('message', handleMessage);
           localStorage.removeItem('ml_oauth_state');
@@ -151,9 +197,9 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       }, 1000);
 
     } catch (error: any) {
-      console.error('Erro na conexão:', error);
+      console.error('❌ Erro na conexão:', error);
       toast({
-        title: "Erro na conexão",
+        title: "❌ Erro na conexão",
         description: error.message || "Não foi possível conectar com o Mercado Livre",
         variant: "destructive"
       });

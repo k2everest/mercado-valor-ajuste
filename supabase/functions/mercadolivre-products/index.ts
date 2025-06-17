@@ -15,12 +15,19 @@ serve(async (req) => {
     const { accessToken, limit = 20, offset = 0 } = await req.json()
 
     if (!accessToken) {
-      throw new Error('Access token is required')
+      console.error('❌ Access token não fornecido')
+      return new Response(
+        JSON.stringify({ 
+          error: 'Token de acesso é obrigatório. Reconecte-se ao Mercado Livre.',
+          code: 'MISSING_TOKEN'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    console.log(`Fetching user information... (limit: ${limit}, offset: ${offset})`)
+    console.log(`🔄 Buscando informações do usuário... (limit: ${limit}, offset: ${offset})`)
 
-    // Get user information first
+    // Get user information first with better error handling
     const userResponse = await fetch('https://api.mercadolibre.com/users/me', {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -29,17 +36,28 @@ serve(async (req) => {
 
     if (!userResponse.ok) {
       const errorText = await userResponse.text()
-      console.error('User fetch error:', errorText)
-      throw new Error(`Failed to get user information: ${userResponse.status}`)
+      console.error('❌ Erro ao buscar usuário:', errorText)
+      
+      if (userResponse.status === 401) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Token de acesso inválido ou expirado. Reconecte-se ao Mercado Livre.',
+            code: 'INVALID_TOKEN'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      throw new Error(`Falha ao obter informações do usuário: ${userResponse.status}`)
     }
 
     const userData = await userResponse.json()
     const userId = userData.id
-    console.log('User ID:', userId)
+    console.log('✅ User ID obtido:', userId)
 
     // If limit is -1, we want to load ALL products
     if (limit === -1) {
-      console.log('Loading ALL products...')
+      console.log('📦 Carregando TODOS os produtos...')
       
       // First, get the total count
       const countResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=1&offset=0`, {
@@ -49,14 +67,24 @@ serve(async (req) => {
       })
 
       if (!countResponse.ok) {
-        throw new Error(`Failed to get product count: ${countResponse.status}`)
+        if (countResponse.status === 401) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Token de acesso inválido. Reconecte-se ao Mercado Livre.',
+              code: 'INVALID_TOKEN'
+            }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        throw new Error(`Falha ao obter contagem de produtos: ${countResponse.status}`)
       }
 
       const countData = await countResponse.json()
       const totalItems = countData.paging?.total || 0
-      console.log('Total items found:', totalItems)
+      console.log('📊 Total de itens encontrados:', totalItems)
 
       if (totalItems === 0) {
+        console.log('⚠️ Nenhum produto ativo encontrado')
         return new Response(
           JSON.stringify({ 
             products: [], 
@@ -84,7 +112,16 @@ serve(async (req) => {
         })
 
         if (!itemsResponse.ok) {
-          console.warn(`Failed to fetch batch at offset ${currentOffset}:`, itemsResponse.status)
+          if (itemsResponse.status === 401) {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Token de acesso inválido. Reconecte-se ao Mercado Livre.',
+                code: 'INVALID_TOKEN'
+              }),
+              { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+          console.warn(`⚠️ Falha ao buscar lote no offset ${currentOffset}:`, itemsResponse.status)
           break
         }
 
@@ -92,7 +129,7 @@ serve(async (req) => {
         allItemIds.push(...itemsData.results)
         currentOffset += batchSize
 
-        console.log(`Fetched batch: ${itemsData.results.length} items (total so far: ${allItemIds.length})`)
+        console.log(`📥 Lote buscado: ${itemsData.results.length} itens (total até agora: ${allItemIds.length})`)
         
         // Break if we've got all items or no more items in this batch
         if (itemsData.results.length < batchSize) {
@@ -100,7 +137,7 @@ serve(async (req) => {
         }
       }
 
-      console.log('Total item IDs collected:', allItemIds.length)
+      console.log('📋 Total de IDs de itens coletados:', allItemIds.length)
 
       // Get detailed information for all items
       const products = []
@@ -126,14 +163,14 @@ serve(async (req) => {
               soldQuantity: item.sold_quantity,
             })
           } else {
-            console.warn(`Failed to fetch item ${itemId}:`, itemResponse.status)
+            console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
           }
         } catch (error) {
-          console.warn(`Error fetching item ${itemId}:`, error.message)
+          console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
         }
       }
 
-      console.log('Successfully processed ALL products:', products.length)
+      console.log('✅ Processamento de TODOS os produtos concluído:', products.length)
 
       return new Response(
         JSON.stringify({ 
@@ -150,7 +187,7 @@ serve(async (req) => {
     }
 
     // Standard pagination flow (when limit is not -1)
-    console.log('Fetching user items with pagination...')
+    console.log('📄 Buscando produtos com paginação...')
     const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=50&offset=${offset}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -159,17 +196,28 @@ serve(async (req) => {
 
     if (!itemsResponse.ok) {
       const errorText = await itemsResponse.text()
-      console.error('Items fetch error:', errorText)
-      throw new Error(`Failed to fetch user items: ${itemsResponse.status}`)
+      console.error('❌ Erro ao buscar itens:', errorText)
+      
+      if (itemsResponse.status === 401) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Token de acesso inválido. Reconecte-se ao Mercado Livre.',
+            code: 'INVALID_TOKEN'
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      throw new Error(`Falha ao buscar itens do usuário: ${itemsResponse.status}`)
     }
 
     const itemsData = await itemsResponse.json()
     const itemIds = itemsData.results
     const totalItems = itemsData.paging?.total || itemIds.length
-    console.log('Found items:', itemIds.length, 'Total items:', totalItems)
+    console.log('📊 Itens encontrados:', itemIds.length, 'Total de itens:', totalItems)
 
     if (itemIds.length === 0) {
-      console.log('No active items found')
+      console.log('⚠️ Nenhum item ativo encontrado')
       return new Response(
         JSON.stringify({ 
           products: [], 
@@ -185,7 +233,7 @@ serve(async (req) => {
     }
 
     // Get detailed information for each item individually
-    console.log('Fetching item details...')
+    console.log('🔍 Buscando detalhes dos itens...')
     const products = []
     const itemsToProcess = itemIds.slice(0, limit)
     
@@ -211,14 +259,14 @@ serve(async (req) => {
             soldQuantity: item.sold_quantity,
           })
         } else {
-          console.warn(`Failed to fetch item ${itemId}:`, itemResponse.status)
+          console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
         }
       } catch (error) {
-        console.warn(`Error fetching item ${itemId}:`, error.message)
+        console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
       }
     }
 
-    console.log('Successfully processed products:', products.length)
+    console.log('✅ Produtos processados com sucesso:', products.length)
 
     const hasMore = (offset + products.length) < totalItems
 
@@ -236,9 +284,12 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('💥 Erro completo:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message || 'Erro interno do servidor',
+        code: 'INTERNAL_ERROR'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
