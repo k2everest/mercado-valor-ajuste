@@ -8,7 +8,7 @@ import { ProductsList } from "./ProductsList";
 import { SettingsPanel } from "./SettingsPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Settings, ShoppingCart } from "lucide-react";
+import { Package, Settings, ShoppingCart, AlertTriangle } from "lucide-react";
 import { Product, PaginationInfo } from './types';
 
 export const Dashboard = () => {
@@ -16,6 +16,7 @@ export const Dashboard = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -28,13 +29,15 @@ export const Dashboard = () => {
 
   const loadProducts = async () => {
     setLoading(true);
+    setConnectionError(null);
+    
     try {
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado');
       }
 
-      console.log('Loading initial products...');
+      console.log('📦 Carregando produtos iniciais...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
         body: { 
@@ -44,24 +47,37 @@ export const Dashboard = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao carregar produtos:', error);
+        
+        if (error.message?.includes('INVALID_TOKEN') || error.message?.includes('unauthorized')) {
+          console.log('🗑️ Token inválido detectado, removendo...');
+          localStorage.removeItem('ml_access_token');
+          setIsConnected(false);
+          setConnectionError('Token de acesso expirado. Reconecte-se ao Mercado Livre.');
+          return;
+        }
+        
+        throw error;
+      }
 
-      console.log('Products loaded:', data.products.length);
-      console.log('Pagination info:', data.pagination);
+      console.log('✅ Produtos carregados:', data.products?.length || 0);
 
       setProducts(data.products || []);
       setPagination(data.pagination || null);
 
       toast({
         title: "✅ Produtos carregados!",
-        description: `${data.products.length} produtos importados com sucesso`,
+        description: `${data.products?.length || 0} produtos importados com sucesso`,
       });
 
     } catch (error: any) {
-      console.error('Error loading products:', error);
+      console.error('💥 Erro ao carregar produtos:', error);
+      setConnectionError(error.message || 'Erro ao carregar produtos');
+      
       toast({
         title: "❌ Erro ao carregar produtos",
-        description: error.message,
+        description: error.message || 'Erro desconhecido',
         variant: "destructive"
       });
     } finally {
@@ -69,29 +85,43 @@ export const Dashboard = () => {
     }
   };
 
-  const handleConnectionChange = (connected: boolean) => {
-    setIsConnected(connected);
-    if (connected) {
-      loadProducts();
-    } else {
-      setProducts([]);
-      setPagination(null);
-    }
-  };
-
   const handleConnect = (newProducts: Product[]) => {
+    console.log('🔗 Dashboard: Nova conexão estabelecida');
     setProducts(newProducts);
     setIsConnected(true);
+    setConnectionError(null);
   };
 
   const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
-    console.log('Dashboard handleLoadMore called:', { 
+    console.log('📄 Dashboard: Carregando mais produtos:', { 
       newProductsCount: newProducts.length, 
       newPagination 
     });
     setProducts(newProducts);
     setPagination(newPagination);
   };
+
+  // Show connection error if exists
+  if (connectionError) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+              <div>
+                <h3 className="font-semibold text-red-900">Erro de Conexão</h3>
+                <p className="text-red-700">{connectionError}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="mt-6">
+          <MercadoLibreConnection onConnect={handleConnect} />
+        </div>
+      </div>
+    );
+  }
 
   if (!isConnected) {
     return (
