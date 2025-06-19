@@ -19,7 +19,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
     pagination,
-    hasOnLoadMore: !!onLoadMore
+    hasOnLoadMore: !!onLoadMore,
+    hasMore: pagination?.hasMore
   });
 
   const loadMoreProducts = async (limit: number) => {
@@ -207,17 +208,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   return (
     <div className="space-y-6">
-      {/* Pagination Controls */}
-      {pagination && onLoadMore && (
-        <ProductsPagination
-          pagination={pagination}
-          onLoadMore={loadMoreProducts}
-          onLoadAll={loadAllProducts}
-          loading={loadingMore}
-          currentProductsCount={products.length}
-        />
-      )}
-
       {/* Freight Calculator */}
       <FreightCalculator
         products={products}
@@ -239,8 +229,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             key={product.id}
             product={product}
             onCalculateFreight={(productId) => {
-              // We need to access the freight calculator's fetchFreightCosts method
-              // For now, we'll show a message that they need to use the main calculator
               toast({
                 title: "Use a calculadora principal",
                 description: "Use a calculadora de frete acima para calcular o custo de todos os produtos",
@@ -253,6 +241,17 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           />
         ))}
       </div>
+
+      {/* Pagination Controls - Show when there are more products to load */}
+      {pagination && pagination.hasMore && onLoadMore && (
+        <ProductsPagination
+          pagination={pagination}
+          onLoadMore={loadMoreProducts}
+          onLoadAll={loadAllProducts}
+          loading={loadingMore}
+          currentProductsCount={products.length}
+        />
+      )}
     </div>
   );
 };

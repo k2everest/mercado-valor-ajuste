@@ -77,30 +77,30 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // ENHANCED LOGIC FOR REPUTATION DISCOUNT
-      // When there's a loyalty discount, seller pays the base_cost (pre-discount value)
+      // FIXED LOGIC FOR REPUTATION DISCOUNT
+      // When there's a loyalty discount, seller ALWAYS pays the base_cost (pre-discount value)
       if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
-        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Usando base_cost');
+        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Vendedor paga base_cost SEMPRE');
         console.log('Desconto detectado:', option.discount);
         
-        // PRIORITY 1: base_cost (real value seller pays before discount)
+        // ALWAYS use base_cost when there's a reputation discount
         if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
           sellerCost = Number(option.base_cost);
           calculationMethod = 'base_cost_com_desconto_reputacao';
           console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
         } 
-        // FALLBACK: If no base_cost, use list_cost
-        else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
-          sellerCost = Number(option.list_cost);
-          calculationMethod = 'list_cost_com_desconto_reputacao';
-          console.log(`✅ VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
-        } 
-        // Calculate from cost + discount amount
+        // If no base_cost, calculate from cost + discount amount
         else if (option.discount?.promoted_amount && option.cost !== undefined) {
           sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
           calculationMethod = 'cost_plus_discount_amount';
           console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
         }
+        // Fallback to list_cost
+        else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+          sellerCost = Number(option.list_cost);
+          calculationMethod = 'list_cost_com_desconto_reputacao';
+          console.log(`✅ VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
+        } 
         // LAST RESORT: use cost even with discount
         else {
           sellerCost = Number(option.cost) || 0;
@@ -195,17 +195,17 @@ export class FreightCalculator {
       
       if (mercadoEnviosPadraoFree.length > 0) {
         console.log('✅ Encontrado Mercado Envios Padrão com frete grátis');
-        // For free shipping, select the one with LOWEST seller cost
+        // For free shipping, select the one with HIGHEST seller cost (more realistic for reputation discounts)
         return mercadoEnviosPadraoFree.reduce((best: any, current: any) => {
           console.log(`Comparando ME Padrão Grátis: ${current.method} (vendedor paga R$ ${current.sellerCost}) vs ${best.method} (vendedor paga R$ ${best.sellerCost})`);
-          return current.sellerCost < best.sellerCost ? current : best;
+          return current.sellerCost > best.sellerCost ? current : best;
         });
       }
       
-      // Select free shipping option with lowest seller cost
+      // Select free shipping option with HIGHEST seller cost (more realistic)
       return freeShippingOptions.reduce((best: any, current: any) => {
         console.log(`Comparando Grátis: ${current.method} (vendedor paga R$ ${current.sellerCost}) vs ${best.method} (vendedor paga R$ ${best.sellerCost})`);
-        return current.sellerCost < best.sellerCost ? current : best;
+        return current.sellerCost > best.sellerCost ? current : best;
       });
     }
     
