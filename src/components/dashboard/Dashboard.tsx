@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
@@ -32,6 +31,8 @@ export const Dashboard = () => {
     
     try {
       const accessToken = localStorage.getItem('ml_access_token');
+      const tokenTimestamp = localStorage.getItem('ml_token_timestamp');
+      
       console.log('🔑 Token no localStorage:', accessToken ? 'Encontrado' : 'Não encontrado');
       
       if (!accessToken) {
@@ -41,7 +42,20 @@ export const Dashboard = () => {
         return;
       }
 
-      // Validate token first
+      // Check if token is expired (ML tokens last 6 months = 6 * 30 * 24 * 60 * 60 * 1000)
+      const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+      const tokenAge = tokenTimestamp ? Date.now() - parseInt(tokenTimestamp) : SIX_MONTHS_MS + 1;
+      
+      if (tokenAge > SIX_MONTHS_MS) {
+        console.log('🕐 Token expirado (mais de 6 meses), limpando...');
+        clearStoredData();
+        setIsConnected(false);
+        setConnectionError('Token expirado. Reconecte-se ao Mercado Livre.');
+        setInitializing(false);
+        return;
+      }
+
+      // Validate token with API
       const isValidToken = await validateToken(accessToken);
       if (!isValidToken) {
         console.log('❌ Token inválido, limpando dados...');
@@ -54,7 +68,7 @@ export const Dashboard = () => {
       console.log('✅ Token válido, carregando dados...');
       setIsConnected(true);
       
-      // Load cached data
+      // Load cached data first
       const storedProducts = localStorage.getItem('ml_products_cache');
       const storedLastSync = localStorage.getItem('ml_last_sync');
       
@@ -76,10 +90,6 @@ export const Dashboard = () => {
       if (!storedProducts) {
         console.log('📥 Nenhum cache encontrado, carregando dados frescos...');
         await loadProducts();
-      } else {
-        // Check for updates in background
-        console.log('🔍 Verificando atualizações em background...');
-        checkForUpdates();
       }
 
     } catch (error) {
@@ -92,6 +102,7 @@ export const Dashboard = () => {
 
   const clearStoredData = () => {
     localStorage.removeItem('ml_access_token');
+    localStorage.removeItem('ml_token_timestamp');
     localStorage.removeItem('ml_products_cache');
     localStorage.removeItem('ml_last_sync');
     setProducts([]);
@@ -124,59 +135,6 @@ export const Dashboard = () => {
     } catch (error) {
       console.error('❌ Erro ao validar token:', error);
       return false;
-    }
-  };
-
-  const checkForUpdates = async () => {
-    const accessToken = localStorage.getItem('ml_access_token');
-    if (!accessToken) return;
-
-    console.log('🔍 Verificando atualizações...');
-    
-    try {
-      // Get just the first few products to check for changes
-      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
-        body: { 
-          accessToken,
-          limit: 5,
-          offset: 0
-        }
-      });
-
-      if (error) {
-        if (error.message?.includes('INVALID_TOKEN')) {
-          console.log('🔑 Token inválido detectado na verificação');
-          clearStoredData();
-          setIsConnected(false);
-          setConnectionError('Token de acesso expirado. Reconecte-se ao Mercado Livre.');
-          return;
-        }
-        throw error;
-      }
-
-      // Compare with cached data
-      const storedProducts = localStorage.getItem('ml_products_cache');
-      if (storedProducts) {
-        const cached = JSON.parse(storedProducts);
-        const hasChanges = data.products?.some((newProduct: Product) => {
-          const cachedProduct = cached.products?.find((p: Product) => p.id === newProduct.id);
-          return !cachedProduct || 
-                 cachedProduct.title !== newProduct.title ||
-                 cachedProduct.originalPrice !== newProduct.originalPrice ||
-                 cachedProduct.status !== newProduct.status;
-        });
-
-        if (!hasChanges) {
-          console.log('✅ Nenhuma atualização necessária');
-          return;
-        }
-      }
-
-      console.log('📥 Atualizações detectadas, recarregando...');
-      loadProducts();
-
-    } catch (error: any) {
-      console.error('❌ Erro ao verificar atualizações:', error);
     }
   };
 
@@ -268,6 +226,9 @@ export const Dashboard = () => {
     setIsConnected(true);
     setConnectionError(null);
     setLastSync(new Date().toISOString());
+    
+    // Store token timestamp when connecting
+    localStorage.setItem('ml_token_timestamp', Date.now().toString());
   };
 
   const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
@@ -287,7 +248,6 @@ export const Dashboard = () => {
     localStorage.setItem('ml_products_cache', JSON.stringify(cacheData));
   };
 
-  // Show loading during initialization
   if (initializing) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -304,7 +264,6 @@ export const Dashboard = () => {
     );
   }
 
-  // Show connection error if exists
   if (connectionError) {
     return (
       <div className="max-w-7xl mx-auto p-6">

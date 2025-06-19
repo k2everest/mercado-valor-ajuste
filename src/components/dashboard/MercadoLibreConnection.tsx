@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
   const [disconnecting, setDisconnecting] = useState(false);
   const { t } = useLanguage();
 
-  // Check if already connected
   const isConnected = !!localStorage.getItem('ml_access_token');
 
   const handleDisconnect = () => {
@@ -24,6 +22,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
     
     try {
       localStorage.removeItem('ml_access_token');
+      localStorage.removeItem('ml_token_timestamp');
       localStorage.removeItem('ml_oauth_state');
       
       toast({
@@ -31,7 +30,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         description: "Sua conta foi desconectada do Mercado Livre com sucesso",
       });
       
-      // Reset products
       onConnect([]);
       
     } catch (error) {
@@ -61,9 +59,8 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
 
       console.log('✅ Token válido, carregando todos os produtos...');
       
-      // Load all products
       const { data: allProductsData, error: allProductsError } = await supabase.functions.invoke('mercadolivre-products', {
-        body: { accessToken: token, limit: 20, offset: 0 }
+        body: { accessToken: token, limit: 50, offset: 0 }
       });
 
       if (allProductsError) {
@@ -84,6 +81,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       if (error.message?.includes('INVALID_TOKEN') || error.message?.includes('unauthorized')) {
         console.log('🗑️ Removendo token inválido...');
         localStorage.removeItem('ml_access_token');
+        localStorage.removeItem('ml_token_timestamp');
         return false;
       }
       
@@ -97,7 +95,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
     try {
       console.log('🔄 Iniciando conexão com Mercado Livre...');
       
-      // Check stored token first
       const storedToken = localStorage.getItem('ml_access_token');
       if (storedToken) {
         console.log('🔑 Token encontrado, testando validade...');
@@ -111,11 +108,9 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
       
       console.log('🔗 Iniciando nova autenticação OAuth...');
       
-      // Generate state for security
       const state = Math.random().toString(36).substring(2, 15);
       localStorage.setItem('ml_oauth_state', state);
 
-      // Get authorization URL
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
         body: { action: 'getAuthUrl', state }
       });
@@ -131,7 +126,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
 
       console.log('🌐 Abrindo janela de autorização...');
 
-      // Open authorization window
       const authWindow = window.open(
         authData.authUrl,
         'mercadolivre-auth',
@@ -142,7 +136,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         throw new Error('Não foi possível abrir a janela de autorização. Verifique se o popup não foi bloqueado.');
       }
 
-      // Handle authorization callback
       const handleMessage = async (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
 
@@ -151,14 +144,12 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
           
           console.log('✅ Autorização bem-sucedida');
           
-          // Verify state
           const savedState = localStorage.getItem('ml_oauth_state');
           if (returnedState !== savedState) {
             throw new Error('Parâmetro de estado inválido');
           }
 
           try {
-            // Exchange code for token
             const { data: tokenData, error: tokenError } = await supabase.functions.invoke('mercadolivre-auth', {
               body: { action: 'exchangeCode', code }
             });
@@ -169,8 +160,8 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
 
             console.log('🔑 Token obtido, salvando e testando...');
             localStorage.setItem('ml_access_token', tokenData.access_token);
+            localStorage.setItem('ml_token_timestamp', Date.now().toString());
             
-            // Test new token and load products
             await testTokenAndLoadProducts(tokenData.access_token);
             
           } catch (error: any) {
@@ -204,7 +195,6 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
 
       window.addEventListener('message', handleMessage);
 
-      // Monitor window closure
       const checkClosed = setInterval(() => {
         if (authWindow?.closed) {
           clearInterval(checkClosed);
