@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
@@ -18,7 +19,9 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     productsCount: products.length,
     pagination,
     hasOnLoadMore: !!onLoadMore,
-    hasMore: pagination?.hasMore
+    hasMore: pagination?.hasMore,
+    paginationTotal: pagination?.total,
+    showPagination: !!(pagination && pagination.hasMore && onLoadMore)
   });
 
   const loadMoreProducts = async (limit: number) => {
@@ -206,6 +209,13 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   return (
     <div className="space-y-6">
+      {/* Debug Information */}
+      {pagination && (
+        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+          Debug: Total: {pagination.total}, Loaded: {products.length}, HasMore: {pagination.hasMore ? 'Yes' : 'No'}, OnLoadMore: {onLoadMore ? 'Yes' : 'No'}
+        </div>
+      )}
+
       {/* Freight Calculator */}
       <FreightCalculator
         products={products}

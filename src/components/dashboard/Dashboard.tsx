@@ -173,6 +173,7 @@ export const Dashboard = () => {
       }
 
       console.log('✅ Produtos carregados:', data.products?.length || 0);
+      console.log('📊 Pagination data:', data.pagination);
 
       setProducts(data.products || []);
       setPagination(data.pagination || null);
@@ -333,6 +334,11 @@ export const Dashboard = () => {
           <TabsTrigger value="products" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             Produtos ({products.length})
+            {pagination && pagination.hasMore && (
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full ml-1">
+                +{pagination.total - products.length}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
