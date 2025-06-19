@@ -19,40 +19,90 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [initializing, setInitializing] = useState(true);
   const { t } = useLanguage();
 
   useEffect(() => {
-    const accessToken = localStorage.getItem('ml_access_token');
-    const storedProducts = localStorage.getItem('ml_products_cache');
-    const storedLastSync = localStorage.getItem('ml_last_sync');
+    initializeDashboard();
+  }, []);
+
+  const initializeDashboard = async () => {
+    console.log('🚀 Inicializando Dashboard...');
+    setInitializing(true);
     
-    if (accessToken) {
-      setIsConnected(true);
-      setLastSync(storedLastSync);
+    try {
+      const accessToken = localStorage.getItem('ml_access_token');
+      console.log('🔑 Token no localStorage:', accessToken ? 'Encontrado' : 'Não encontrado');
       
-      // Load cached products if available
-      if (storedProducts) {
+      if (!accessToken) {
+        console.log('❌ Nenhum token encontrado, usuário não conectado');
+        setIsConnected(false);
+        setInitializing(false);
+        return;
+      }
+
+      // Validate token first
+      const isValidToken = await validateToken(accessToken);
+      if (!isValidToken) {
+        console.log('❌ Token inválido, limpando dados...');
+        clearStoredData();
+        setIsConnected(false);
+        setInitializing(false);
+        return;
+      }
+
+      console.log('✅ Token válido, carregando dados...');
+      setIsConnected(true);
+      
+      // Load cached data
+      const storedProducts = localStorage.getItem('ml_products_cache');
+      const storedLastSync = localStorage.getItem('ml_last_sync');
+      
+      if (storedProducts && storedLastSync) {
         try {
           const cached = JSON.parse(storedProducts);
-          setProducts(cached.products);
-          setPagination(cached.pagination);
-          console.log('📦 Produtos carregados do cache:', cached.products.length);
+          console.log('📦 Carregando produtos do cache:', cached.products?.length || 0);
+          setProducts(cached.products || []);
+          setPagination(cached.pagination || null);
+          setLastSync(storedLastSync);
         } catch (error) {
           console.error('Erro ao carregar cache:', error);
+          localStorage.removeItem('ml_products_cache');
+          localStorage.removeItem('ml_last_sync');
         }
       }
-      
-      // Check for updates only if we have cached data
-      if (storedProducts && storedLastSync) {
-        checkForUpdates();
+
+      // If no cached data, load fresh data
+      if (!storedProducts) {
+        console.log('📥 Nenhum cache encontrado, carregando dados frescos...');
+        await loadProducts();
       } else {
-        loadProducts();
+        // Check for updates in background
+        console.log('🔍 Verificando atualizações em background...');
+        checkForUpdates();
       }
+
+    } catch (error) {
+      console.error('❌ Erro na inicialização:', error);
+      setConnectionError('Erro ao inicializar dashboard');
+    } finally {
+      setInitializing(false);
     }
-  }, []);
+  };
+
+  const clearStoredData = () => {
+    localStorage.removeItem('ml_access_token');
+    localStorage.removeItem('ml_products_cache');
+    localStorage.removeItem('ml_last_sync');
+    setProducts([]);
+    setPagination(null);
+    setLastSync(null);
+    setConnectionError(null);
+  };
 
   const validateToken = async (token: string): Promise<boolean> => {
     try {
+      console.log('🔍 Validando token...');
       const response = await fetch('https://api.mercadolibre.com/users/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -60,18 +110,19 @@ export const Dashboard = () => {
       });
       
       if (response.status === 401) {
-        console.log('🔑 Token inválido detectado');
-        localStorage.removeItem('ml_access_token');
-        localStorage.removeItem('ml_products_cache');
-        localStorage.removeItem('ml_last_sync');
-        setIsConnected(false);
-        setConnectionError('Token de acesso expirado. Reconecte-se ao Mercado Livre.');
+        console.log('🔑 Token expirado/inválido');
         return false;
       }
       
-      return response.ok;
+      if (!response.ok) {
+        console.log('⚠️ Erro ao validar token:', response.status);
+        return false;
+      }
+      
+      console.log('✅ Token válido');
+      return true;
     } catch (error) {
-      console.error('Erro ao validar token:', error);
+      console.error('❌ Erro ao validar token:', error);
       return false;
     }
   };
@@ -82,9 +133,6 @@ export const Dashboard = () => {
 
     console.log('🔍 Verificando atualizações...');
     
-    const isValidToken = await validateToken(accessToken);
-    if (!isValidToken) return;
-
     try {
       // Get just the first few products to check for changes
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
@@ -96,6 +144,13 @@ export const Dashboard = () => {
       });
 
       if (error) {
+        if (error.message?.includes('INVALID_TOKEN')) {
+          console.log('🔑 Token inválido detectado na verificação');
+          clearStoredData();
+          setIsConnected(false);
+          setConnectionError('Token de acesso expirado. Reconecte-se ao Mercado Livre.');
+          return;
+        }
         throw error;
       }
 
@@ -103,8 +158,8 @@ export const Dashboard = () => {
       const storedProducts = localStorage.getItem('ml_products_cache');
       if (storedProducts) {
         const cached = JSON.parse(storedProducts);
-        const hasChanges = data.products.some((newProduct: Product) => {
-          const cachedProduct = cached.products.find((p: Product) => p.id === newProduct.id);
+        const hasChanges = data.products?.some((newProduct: Product) => {
+          const cachedProduct = cached.products?.find((p: Product) => p.id === newProduct.id);
           return !cachedProduct || 
                  cachedProduct.title !== newProduct.title ||
                  cachedProduct.originalPrice !== newProduct.originalPrice ||
@@ -121,7 +176,7 @@ export const Dashboard = () => {
       loadProducts();
 
     } catch (error: any) {
-      console.error('Erro ao verificar atualizações:', error);
+      console.error('❌ Erro ao verificar atualizações:', error);
     }
   };
 
@@ -135,15 +190,12 @@ export const Dashboard = () => {
         throw new Error('Token de acesso não encontrado');
       }
 
-      const isValidToken = await validateToken(accessToken);
-      if (!isValidToken) return;
-
       console.log('📦 Carregando produtos...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
         body: { 
           accessToken,
-          limit: 50, // Increased from 20 to 50
+          limit: 50,
           offset: 0
         }
       });
@@ -152,10 +204,8 @@ export const Dashboard = () => {
         console.error('❌ Erro ao carregar produtos:', error);
         
         if (error.message?.includes('INVALID_TOKEN') || error.message?.includes('unauthorized')) {
-          console.log('🗑️ Token inválido detectado, removendo...');
-          localStorage.removeItem('ml_access_token');
-          localStorage.removeItem('ml_products_cache');
-          localStorage.removeItem('ml_last_sync');
+          console.log('🗑️ Token inválido detectado, limpando dados...');
+          clearStoredData();
           setIsConnected(false);
           setConnectionError('Token de acesso expirado. Reconecte-se ao Mercado Livre.');
           return;
@@ -180,10 +230,17 @@ export const Dashboard = () => {
       localStorage.setItem('ml_last_sync', new Date().toISOString());
       setLastSync(new Date().toISOString());
 
-      toast({
-        title: "✅ Produtos sincronizados!",
-        description: `${data.products?.length || 0} produtos atualizados com sucesso`,
-      });
+      if (data.products?.length > 0) {
+        toast({
+          title: "✅ Produtos sincronizados!",
+          description: `${data.products.length} produtos atualizados com sucesso`,
+        });
+      } else {
+        toast({
+          title: "⚠️ Nenhum produto encontrado",
+          description: "Você não possui produtos ativos no Mercado Livre",
+        });
+      }
 
     } catch (error: any) {
       console.error('💥 Erro ao carregar produtos:', error);
@@ -229,6 +286,23 @@ export const Dashboard = () => {
     };
     localStorage.setItem('ml_products_cache', JSON.stringify(cacheData));
   };
+
+  // Show loading during initialization
+  if (initializing) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-pulse" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Inicializando...</h3>
+            <p className="text-gray-600">
+              Verificando sua conexão e carregando dados...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Show connection error if exists
   if (connectionError) {
@@ -299,7 +373,7 @@ export const Dashboard = () => {
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="products" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
-            Produtos
+            Produtos ({products.length})
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -316,6 +390,29 @@ export const Dashboard = () => {
                 <p className="text-gray-600">
                   Buscando seus produtos do Mercado Livre...
                 </p>
+              </CardContent>
+            </Card>
+          ) : products.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum produto encontrado</h3>
+                <p className="text-gray-600 mb-4">
+                  Você não possui produtos ativos no Mercado Livre ou eles ainda não foram carregados.
+                </p>
+                <Button onClick={loadProducts} disabled={loading}>
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Carregando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Tentar Novamente
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           ) : (

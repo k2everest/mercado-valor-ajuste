@@ -13,6 +13,12 @@ const Index = () => {
   const { user, loading } = useAuth();
   const { t } = useLanguage();
 
+  console.log('🏠 Index - Estado da autenticação:', { 
+    loading, 
+    user: user ? 'Autenticado' : 'Não autenticado',
+    userId: user?.id 
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
@@ -24,10 +30,14 @@ const Index = () => {
     );
   }
 
+  // Se o usuário está autenticado, mostrar o dashboard
   if (user) {
+    console.log('✅ Usuário autenticado, renderizando Dashboard');
     return <Dashboard />;
   }
 
+  // Se não está autenticado, mostrar a página inicial
+  console.log('❌ Usuário não autenticado, renderizando Home');
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       {/* Header */}
