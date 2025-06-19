@@ -192,9 +192,9 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   if (products.length === 0) {
     return (
-      <Card>
+      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
         <CardContent className="p-8 text-center">
-          <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <Package className="h-12 w-12 mx-auto mb-4 text-blue-400" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum produto encontrado</h3>
           <p className="text-gray-600">
             Não foi possível encontrar produtos ativos em sua conta do Mercado Livre.

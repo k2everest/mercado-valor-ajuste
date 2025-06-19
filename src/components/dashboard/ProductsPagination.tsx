@@ -29,13 +29,7 @@ export const ProductsPagination = ({
   loading, 
   currentProductsCount 
 }: ProductsPaginationProps) => {
-  const [selectedLimit, setSelectedLimit] = useState<string>("50");
   const [customLimit, setCustomLimit] = useState<string>("");
-
-  const handleLoadMore = () => {
-    const limit = parseInt(selectedLimit);
-    onLoadMore(limit);
-  };
 
   const handleLoadCustom = () => {
     const limit = parseInt(customLimit);
@@ -46,9 +40,9 @@ export const ProductsPagination = ({
   };
 
   return (
-    <Card>
+    <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-blue-800">
           <Package className="h-5 w-5" />
           Controle de Carregamento
         </CardTitle>
@@ -57,11 +51,11 @@ export const ProductsPagination = ({
         <div className="space-y-4">
           {/* Status Info */}
           <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="outline">
+            <Badge className="bg-blue-100 text-blue-800 border-blue-200">
               Carregados: {currentProductsCount} de {pagination.total}
             </Badge>
             {pagination.hasMore && (
-              <Badge variant="secondary">
+              <Badge className="bg-purple-100 text-purple-800 border-purple-200">
                 Mais {pagination.total - currentProductsCount} disponíveis
               </Badge>
             )}
@@ -77,7 +71,7 @@ export const ProductsPagination = ({
                   disabled={loading}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
                   +20
@@ -87,7 +81,7 @@ export const ProductsPagination = ({
                   disabled={loading}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
                   +50
@@ -97,7 +91,7 @@ export const ProductsPagination = ({
                   disabled={loading}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
                   +100
@@ -107,7 +101,7 @@ export const ProductsPagination = ({
                   disabled={loading}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
                   +200
@@ -115,7 +109,7 @@ export const ProductsPagination = ({
                 <Button
                   onClick={onLoadAll}
                   disabled={loading}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                   size="sm"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
@@ -125,7 +119,7 @@ export const ProductsPagination = ({
 
               {/* Custom Amount Input */}
               <div className="flex items-center gap-2">
-                <label htmlFor="custom-limit" className="text-sm font-medium whitespace-nowrap">
+                <label htmlFor="custom-limit" className="text-sm font-medium whitespace-nowrap text-gray-700">
                   Quantidade personalizada:
                 </label>
                 <Input
@@ -134,7 +128,7 @@ export const ProductsPagination = ({
                   value={customLimit}
                   onChange={(e) => setCustomLimit(e.target.value)}
                   placeholder="Ex: 150"
-                  className="w-24"
+                  className="w-24 border-blue-200 focus:border-blue-400"
                   min="1"
                   max="1000"
                   disabled={loading}
@@ -144,40 +138,7 @@ export const ProductsPagination = ({
                   disabled={loading || !customLimit || parseInt(customLimit) <= 0}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
-                >
-                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
-                  Carregar
-                </Button>
-              </div>
-
-              {/* Dropdown Selection (Alternative) */}
-              <div className="flex items-center gap-2">
-                <label htmlFor="limit-select" className="text-sm font-medium whitespace-nowrap">
-                  Ou selecione:
-                </label>
-                <Select 
-                  value={selectedLimit} 
-                  onValueChange={setSelectedLimit}
-                  disabled={loading}
-                >
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                    <SelectItem value="200">200</SelectItem>
-                    <SelectItem value="500">500</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  onClick={handleLoadMore}
-                  disabled={loading}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 border-purple-200 text-purple-700 hover:bg-purple-50"
                 >
                   {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
                   Carregar
@@ -188,7 +149,7 @@ export const ProductsPagination = ({
 
           {!pagination.hasMore && currentProductsCount > 0 && (
             <div className="text-center py-2">
-              <Badge variant="secondary">
+              <Badge className="bg-green-100 text-green-800 border-green-200">
                 ✅ Todos os produtos foram carregados
               </Badge>
             </div>

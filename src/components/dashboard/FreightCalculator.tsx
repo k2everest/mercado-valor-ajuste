@@ -43,6 +43,7 @@ export const FreightCalculator = ({
         body: { 
           action: 'getShippingCosts',
           productId,
+          zipCode: '01310-100', // Fixed ZIP code for São Paulo center
           accessToken
         }
       });
@@ -95,6 +96,16 @@ export const FreightCalculator = ({
         freightMethod: selectedOption.method
       });
 
+      // Store calculation in localStorage to avoid recalculation
+      const calculationCache = JSON.parse(localStorage.getItem('freight_calculations') || '{}');
+      calculationCache[productId] = {
+        freightCost: finalCustomerCost,
+        sellerFreightCost: finalSellerCost,
+        freightMethod: selectedOption.method,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('freight_calculations', JSON.stringify(calculationCache));
+
       const discountInfo = selectedOption.discount ? ` (com desconto: ${selectedOption.discount})` : '';
       
       toast({
@@ -118,30 +129,44 @@ export const FreightCalculator = ({
   };
 
   const calculateAllFreights = () => {
+    const calculationCache = JSON.parse(localStorage.getItem('freight_calculations') || '{}');
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); // 24 hours cache
+
     products.forEach(product => {
       if (!loadingFreight[product.id]) {
-        fetchFreightCosts(product.id);
+        // Check if we have a recent calculation
+        const cachedCalculation = calculationCache[product.id];
+        if (cachedCalculation && cachedCalculation.timestamp > oneDayAgo) {
+          console.log(`Using cached calculation for product ${product.id}`);
+          onFreightCalculated(product.id, {
+            freightCost: cachedCalculation.freightCost,
+            sellerFreightCost: cachedCalculation.sellerFreightCost,
+            freightMethod: cachedCalculation.freightMethod
+          });
+        } else {
+          fetchFreightCosts(product.id);
+        }
       }
     });
   };
 
   return (
-    <Card>
+    <Card className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-white">
           <Calculator className="h-5 w-5" />
           Calculadora de Frete Mercado Livre
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="text-center">
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-blue-100 mb-4">
             Calcule o custo real do frete que você paga como vendedor
           </p>
           <Button
             onClick={calculateAllFreights}
             disabled={Object.values(loadingFreight).some(Boolean)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 bg-white text-blue-600 hover:bg-blue-50"
           >
             <Truck className="h-4 w-4" />
             {Object.values(loadingFreight).some(Boolean) ? 'Calculando...' : 'Calcular Custo Real'}
