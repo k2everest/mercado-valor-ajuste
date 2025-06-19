@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
@@ -14,7 +13,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
-  const [zipCode, setZipCode] = useState('');
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -222,6 +220,17 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         onAdjustAllPrices={adjustAllPrices}
       />
 
+      {/* Pagination Controls - Show at top when there are more products to load */}
+      {pagination && pagination.hasMore && onLoadMore && (
+        <ProductsPagination
+          pagination={pagination}
+          onLoadMore={loadMoreProducts}
+          onLoadAll={loadAllProducts}
+          loading={loadingMore}
+          currentProductsCount={products.length}
+        />
+      )}
+
       {/* Products Grid */}
       <div className="grid gap-4">
         {products.map((product) => (
@@ -237,12 +246,12 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             }}
             onAdjustPrice={adjustPrice}
             loadingFreight={loadingFreight[product.id] || false}
-            zipCode={zipCode}
+            zipCode=""
           />
         ))}
       </div>
 
-      {/* Pagination Controls - Show when there are more products to load */}
+      {/* Pagination Controls - Show at bottom too when there are more products to load */}
       {pagination && pagination.hasMore && onLoadMore && (
         <ProductsPagination
           pagination={pagination}

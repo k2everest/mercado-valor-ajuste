@@ -1,6 +1,7 @@
 
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +29,20 @@ export const ProductsPagination = ({
   loading, 
   currentProductsCount 
 }: ProductsPaginationProps) => {
-  const [selectedLimit, setSelectedLimit] = useState<string>("50"); // Changed from 20 to 50
+  const [selectedLimit, setSelectedLimit] = useState<string>("50");
+  const [customLimit, setCustomLimit] = useState<string>("");
 
   const handleLoadMore = () => {
     const limit = parseInt(selectedLimit);
     onLoadMore(limit);
+  };
+
+  const handleLoadCustom = () => {
+    const limit = parseInt(customLimit);
+    if (limit > 0 && limit <= 1000) {
+      onLoadMore(limit);
+      setCustomLimit("");
+    }
   };
 
   return (
@@ -59,10 +69,92 @@ export const ProductsPagination = ({
 
           {/* Load More Controls */}
           {pagination.hasMore && (
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="space-y-4">
+              {/* Quick Load Options */}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => onLoadMore(20)}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  +20
+                </Button>
+                <Button
+                  onClick={() => onLoadMore(50)}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  +50
+                </Button>
+                <Button
+                  onClick={() => onLoadMore(100)}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  +100
+                </Button>
+                <Button
+                  onClick={() => onLoadMore(200)}
+                  disabled={loading}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  +200
+                </Button>
+                <Button
+                  onClick={onLoadAll}
+                  disabled={loading}
+                  className="flex items-center gap-2"
+                  size="sm"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+                  Todos
+                </Button>
+              </div>
+
+              {/* Custom Amount Input */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="custom-limit" className="text-sm font-medium whitespace-nowrap">
+                  Quantidade personalizada:
+                </label>
+                <Input
+                  id="custom-limit"
+                  type="number"
+                  value={customLimit}
+                  onChange={(e) => setCustomLimit(e.target.value)}
+                  placeholder="Ex: 150"
+                  className="w-24"
+                  min="1"
+                  max="1000"
+                  disabled={loading}
+                />
+                <Button
+                  onClick={handleLoadCustom}
+                  disabled={loading || !customLimit || parseInt(customLimit) <= 0}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  Carregar
+                </Button>
+              </div>
+
+              {/* Dropdown Selection (Alternative) */}
               <div className="flex items-center gap-2">
                 <label htmlFor="limit-select" className="text-sm font-medium whitespace-nowrap">
-                  Carregar mais:
+                  Ou selecione:
                 </label>
                 <Select 
                   value={selectedLimit} 
@@ -77,36 +169,18 @@ export const ProductsPagination = ({
                     <SelectItem value="50">50</SelectItem>
                     <SelectItem value="100">100</SelectItem>
                     <SelectItem value="200">200</SelectItem>
+                    <SelectItem value="500">500</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              
-              <div className="flex gap-2">
                 <Button
                   onClick={handleLoadMore}
                   disabled={loading}
                   variant="outline"
+                  size="sm"
                   className="flex items-center gap-2"
                 >
-                  {loading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                  Carregar +{selectedLimit}
-                </Button>
-                
-                <Button
-                  onClick={onLoadAll}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  {loading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Package className="h-4 w-4" />
-                  )}
-                  Carregar Todos
+                  {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ChevronDown className="h-3 w-3" />}
+                  Carregar
                 </Button>
               </div>
             </div>

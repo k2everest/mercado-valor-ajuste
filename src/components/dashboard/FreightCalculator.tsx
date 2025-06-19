@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { Calculator, Truck } from "lucide-react";
 import { Product } from './types';
@@ -24,34 +23,13 @@ export const FreightCalculator = ({
   loadingFreight, 
   setLoadingFreight 
 }: FreightCalculatorProps) => {
-  const [zipCode, setZipCode] = useState('');
-
   const fetchFreightCosts = async (productId: string) => {
-    if (!zipCode || zipCode.trim().length === 0) {
-      toast({
-        title: "❌ CEP obrigatório",
-        description: "Digite um CEP válido para calcular o frete real",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const cleanZipCode = zipCode.replace(/\D/g, '');
-    if (cleanZipCode.length !== 8) {
-      toast({
-        title: "❌ CEP inválido",
-        description: "Digite um CEP com 8 dígitos",
-        variant: "destructive"
-      });
-      return;
-    }
-
     setLoadingFreight({ ...loadingFreight, [productId]: true });
 
     try {
       console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL DA API MERCADO LIVRE');
       console.log('📍 Produto ID:', productId);
-      console.log('📍 CEP limpo:', cleanZipCode);
+      console.log('📍 Usando CEP fixo para cálculo do vendedor');
       
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
@@ -65,7 +43,6 @@ export const FreightCalculator = ({
         body: { 
           action: 'getShippingCosts',
           productId,
-          zipCode: cleanZipCode,
           accessToken
         }
       });
@@ -141,14 +118,6 @@ export const FreightCalculator = ({
   };
 
   const calculateAllFreights = () => {
-    if (!zipCode || zipCode.trim().length === 0) {
-      toast({
-        title: "❌ CEP obrigatório",
-        description: "Digite um CEP válido para calcular o frete real",
-        variant: "destructive"
-      });
-      return;
-    }
     products.forEach(product => {
       if (!loadingFreight[product.id]) {
         fetchFreightCosts(product.id);
@@ -165,19 +134,10 @@ export const FreightCalculator = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-4 items-end">
-          <div className="flex-1">
-            <label htmlFor="zipcode" className="block text-sm font-medium mb-2">
-              CEP de Destino (obrigatório)
-            </label>
-            <Input
-              id="zipcode"
-              value={zipCode}
-              onChange={(e) => setZipCode(e.target.value)}
-              placeholder="Digite o CEP (ex: 01310-100)"
-              maxLength={9}
-            />
-          </div>
+        <div className="text-center">
+          <p className="text-sm text-gray-600 mb-4">
+            Calcule o custo real do frete que você paga como vendedor
+          </p>
           <Button
             onClick={calculateAllFreights}
             disabled={Object.values(loadingFreight).some(Boolean)}
