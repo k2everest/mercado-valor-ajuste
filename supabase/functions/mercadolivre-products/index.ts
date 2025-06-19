@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { accessToken, limit = 20, offset = 0 } = await req.json()
+    const { accessToken, limit = 50, offset = 0 } = await req.json() // Changed default from 20 to 50
 
     if (!accessToken) {
       console.error('❌ Access token não fornecido')
@@ -27,7 +27,7 @@ serve(async (req) => {
 
     console.log(`🔄 Buscando informações do usuário... (limit: ${limit}, offset: ${offset})`)
 
-    // Get user information first with better error handling
+    // Enhanced token validation
     const userResponse = await fetch('https://api.mercadolibre.com/users/me', {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -55,11 +55,10 @@ serve(async (req) => {
     const userId = userData.id
     console.log('✅ User ID obtido:', userId)
 
-    // If limit is -1, we want to load ALL products
+    // Load ALL products when limit is -1
     if (limit === -1) {
       console.log('📦 Carregando TODOS os produtos...')
       
-      // First, get the total count
       const countResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=1&offset=0`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -99,7 +98,7 @@ serve(async (req) => {
         )
       }
 
-      // Get all item IDs in batches (MercadoLibre API limit is 50 per request)
+      // Get all item IDs in batches
       const allItemIds = []
       const batchSize = 50
       let currentOffset = 0
@@ -131,7 +130,6 @@ serve(async (req) => {
 
         console.log(`📥 Lote buscado: ${itemsData.results.length} itens (total até agora: ${allItemIds.length})`)
         
-        // Break if we've got all items or no more items in this batch
         if (itemsData.results.length < batchSize) {
           break
         }
@@ -139,8 +137,10 @@ serve(async (req) => {
 
       console.log('📋 Total de IDs de itens coletados:', allItemIds.length)
 
-      // Get detailed information for all items
+      // Get detailed information for all items with better error handling
       const products = []
+      let processedCount = 0
+      
       for (const itemId of allItemIds) {
         try {
           const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
@@ -165,6 +165,11 @@ serve(async (req) => {
           } else {
             console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
           }
+          
+          processedCount++
+          if (processedCount % 50 === 0) {
+            console.log(`📊 Processados ${processedCount}/${allItemIds.length} produtos`)
+          }
         } catch (error) {
           console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
         }
@@ -186,9 +191,10 @@ serve(async (req) => {
       )
     }
 
-    // Standard pagination flow (when limit is not -1)
+    // Standard pagination flow with improved batch size
     console.log('📄 Buscando produtos com paginação...')
-    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=50&offset=${offset}`, {
+    const batchSize = Math.min(limit, 50) // Ensure we don't exceed ML API limits
+    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=${batchSize}&offset=${offset}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
@@ -232,38 +238,56 @@ serve(async (req) => {
       )
     }
 
-    // Get detailed information for each item individually
+    // Get detailed information for each item with better performance
     console.log('🔍 Buscando detalhes dos itens...')
     const products = []
     const itemsToProcess = itemIds.slice(0, limit)
     
-    for (const itemId of itemsToProcess) {
-      try {
-        const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        })
-
-        if (itemResponse.ok) {
-          const item = await itemResponse.json()
-          products.push({
-            id: item.id,
-            title: item.title,
-            originalPrice: item.price,
-            status: item.status,
-            freeShipping: item.shipping?.free_shipping || false,
-            permalink: item.permalink,
-            thumbnail: item.thumbnail,
-            availableQuantity: item.available_quantity,
-            soldQuantity: item.sold_quantity,
+    // Process items in smaller batches to avoid timeouts
+    const processBatch = async (batch: string[]) => {
+      const batchPromises = batch.map(async (itemId) => {
+        try {
+          const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
           })
-        } else {
-          console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
+
+          if (itemResponse.ok) {
+            const item = await itemResponse.json()
+            return {
+              id: item.id,
+              title: item.title,
+              originalPrice: item.price,
+              status: item.status,
+              freeShipping: item.shipping?.free_shipping || false,
+              permalink: item.permalink,
+              thumbnail: item.thumbnail,
+              availableQuantity: item.available_quantity,
+              soldQuantity: item.sold_quantity,
+            }
+          } else {
+            console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
+            return null
+          }
+        } catch (error) {
+          console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
+          return null
         }
-      } catch (error) {
-        console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
-      }
+      })
+      
+      const results = await Promise.all(batchPromises)
+      return results.filter(item => item !== null)
+    }
+
+    // Process in batches of 10 to avoid overwhelming the API
+    const batchSize2 = 10
+    for (let i = 0; i < itemsToProcess.length; i += batchSize2) {
+      const batch = itemsToProcess.slice(i, i + batchSize2)
+      const batchResults = await processBatch(batch)
+      products.push(...batchResults)
+      
+      console.log(`📦 Processado lote ${Math.floor(i/batchSize2) + 1}/${Math.ceil(itemsToProcess.length/batchSize2)}`)
     }
 
     console.log('✅ Produtos processados com sucesso:', products.length)

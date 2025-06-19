@@ -28,7 +28,7 @@ export const ProductsPagination = ({
   loading, 
   currentProductsCount 
 }: ProductsPaginationProps) => {
-  const [selectedLimit, setSelectedLimit] = useState<string>("20");
+  const [selectedLimit, setSelectedLimit] = useState<string>("50"); // Changed from 20 to 50
 
   const handleLoadMore = () => {
     const limit = parseInt(selectedLimit);
@@ -74,9 +74,9 @@ export const ProductsPagination = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="40">40</SelectItem>
-                    <SelectItem value="60">60</SelectItem>
-                    <SelectItem value="80">80</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="200">200</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

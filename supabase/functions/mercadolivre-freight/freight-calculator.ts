@@ -77,28 +77,35 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // CORREÇÃO CRUCIAL PARA DESCONTO POR REPUTAÇÃO
-      // When there's a loyalty discount, seller ALWAYS pays the base_cost (pre-discount value)
+      // ENHANCED LOGIC FOR REPUTATION DISCOUNT
+      // When there's a loyalty discount, seller pays the base_cost (pre-discount value)
       if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
         console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Usando base_cost');
+        console.log('Desconto detectado:', option.discount);
         
         // PRIORITY 1: base_cost (real value seller pays before discount)
         if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
           sellerCost = Number(option.base_cost);
           calculationMethod = 'base_cost_com_desconto_reputacao';
-          console.log(`VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
+          console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
         } 
         // FALLBACK: If no base_cost, use list_cost
         else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
           sellerCost = Number(option.list_cost);
           calculationMethod = 'list_cost_com_desconto_reputacao';
-          console.log(`VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
+          console.log(`✅ VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
         } 
+        // Calculate from cost + discount amount
+        else if (option.discount?.promoted_amount && option.cost !== undefined) {
+          sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
+          calculationMethod = 'cost_plus_discount_amount';
+          console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
+        }
         // LAST RESORT: use cost even with discount
         else {
           sellerCost = Number(option.cost) || 0;
           calculationMethod = 'cost_fallback_com_desconto';
-          console.log(`VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
+          console.log(`⚠️ VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
         }
       } else {
         // NO LOYALTY DISCOUNT - use normal hierarchy
@@ -107,19 +114,19 @@ export class FreightCalculator {
         if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
           sellerCost = Number(option.list_cost);
           calculationMethod = 'list_cost_original';
-          console.log(`VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
+          console.log(`✅ VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
         } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
           sellerCost = Number(option.base_cost);
           calculationMethod = 'base_cost_fallback';
-          console.log(`VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
+          console.log(`✅ VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
         } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
           sellerCost = Number(option.seller_cost);
           calculationMethod = 'seller_cost_direto';
-          console.log(`VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
+          console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
         } else {
           sellerCost = Number(option.cost) || 0;
           calculationMethod = 'cost_last_resort';
-          console.log(`VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
+          console.log(`⚠️ VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
         }
       }
     } else {
@@ -128,7 +135,7 @@ export class FreightCalculator {
       sellerCost = 0; // Seller pays nothing
       buyerCost = Number(option.cost) || 0; // Customer pays the listed cost
       calculationMethod = 'cost_comprador';
-      console.log(`COMPRADOR PAGA: R$ ${buyerCost}`);
+      console.log(`✅ COMPRADOR PAGA: R$ ${buyerCost}`);
     }
     
     console.log(`CUSTO FINAL - Vendedor: R$ ${sellerCost} | Comprador: R$ ${buyerCost} (pago por: ${paidBy}, método: ${calculationMethod})`);
@@ -173,15 +180,14 @@ export class FreightCalculator {
   static selectBestOption(options: ProcessedFreightOption[]): ProcessedFreightOption {
     console.log(`🔍 SELECIONANDO MELHOR OPÇÃO ENTRE ${options.length} opções válidas`);
     
-    // NOVA LÓGICA: Para produtos SEM frete grátis, escolher a opção com MAIOR CUSTO
-    // Isso garante que pegamos o custo real que o comprador vai pagar
+    // Enhanced logic for selecting best option
     const freeShippingOptions = options.filter(option => option.isFreeShipping);
     const paidShippingOptions = options.filter(option => !option.isFreeShipping);
     
     console.log(`Opções com frete grátis: ${freeShippingOptions.length}`);
     console.log(`Opções com frete pago: ${paidShippingOptions.length}`);
     
-    // Se há opções com frete grátis, priorizar Mercado Envios Padrão entre elas
+    // Prioritize free shipping options
     if (freeShippingOptions.length > 0) {
       console.log('📦 PRIORIZANDO FRETE GRÁTIS');
       
@@ -189,21 +195,25 @@ export class FreightCalculator {
       
       if (mercadoEnviosPadraoFree.length > 0) {
         console.log('✅ Encontrado Mercado Envios Padrão com frete grátis');
+        // For free shipping, select the one with LOWEST seller cost
         return mercadoEnviosPadraoFree.reduce((best: any, current: any) => {
+          console.log(`Comparando ME Padrão Grátis: ${current.method} (vendedor paga R$ ${current.sellerCost}) vs ${best.method} (vendedor paga R$ ${best.sellerCost})`);
           return current.sellerCost < best.sellerCost ? current : best;
         });
       }
       
+      // Select free shipping option with lowest seller cost
       return freeShippingOptions.reduce((best: any, current: any) => {
+        console.log(`Comparando Grátis: ${current.method} (vendedor paga R$ ${current.sellerCost}) vs ${best.method} (vendedor paga R$ ${best.sellerCost})`);
         return current.sellerCost < best.sellerCost ? current : best;
       });
     }
     
-    // Se NÃO há frete grátis, escolher a opção com MAIOR custo (mais realista para o comprador)
+    // For paid shipping, prioritize realistic highest cost
     if (paidShippingOptions.length > 0) {
       console.log('💰 PRODUTOS SEM FRETE GRÁTIS - Priorizando custo maior (mais realista)');
       
-      // Primeiro, tentar encontrar Mercado Envios Padrão
+      // First, try to find Mercado Envios Padrão
       const mercadoEnviosPadrao = paidShippingOptions.filter(option => option.isMercadoEnviosPadrao);
       
       if (mercadoEnviosPadrao.length > 0) {
@@ -212,21 +222,21 @@ export class FreightCalculator {
           console.log(`Comparando ME Padrão: ${current.method} (R$ ${current.buyerCost}) vs ${best.method} (R$ ${best.buyerCost})`);
           return current.buyerCost > best.buyerCost ? current : best;
         });
-        console.log(`🎯 SELECIONADO ME PADRÃO: ${selectedOption.method} - R$ ${selectedOption.buyerCost}`);
+        console.log(`🎯 SELECIONADO ME PADRÃO: ${selectedOption.method} - Comprador paga R$ ${selectedOption.buyerCost}`);
         return selectedOption;
       }
       
-      // Se não há ME Padrão, pegar a opção com maior custo entre todas
+      // If no ME Padrão, get the option with highest cost among all
       const selectedOption = paidShippingOptions.reduce((best: any, current: any) => {
         console.log(`Comparando: ${current.method} (R$ ${current.buyerCost}) vs ${best.method} (R$ ${best.buyerCost})`);
         return current.buyerCost > best.buyerCost ? current : best;
       });
       
-      console.log(`🎯 SELECIONADO (maior custo): ${selectedOption.method} - R$ ${selectedOption.buyerCost}`);
+      console.log(`🎯 SELECIONADO (maior custo): ${selectedOption.method} - Comprador paga R$ ${selectedOption.buyerCost}`);
       return selectedOption;
     }
     
-    // Fallback: retornar primeira opção se nenhuma lógica acima funcionou
+    // Fallback: return first option if no logic above worked
     console.warn('⚠️ FALLBACK: Usando primeira opção disponível');
     return options[0];
   }
