@@ -29,26 +29,24 @@ export class CostCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // Para frete grátis tradicional, priorizar list_cost (valor real do vendedor)
+      // CORREÇÃO FUNDAMENTAL: Para frete grátis tradicional, usar SEMPRE list_cost (valor real do vendedor)
+      // NUNQUER usar base_cost que é valor do Flex!
       if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
         sellerCost = Number(option.list_cost);
-        calculationMethod = 'list_cost_frete_gratis';
-        console.log(`✅ VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
+        calculationMethod = 'list_cost_frete_gratis_valor_real';
+        console.log(`✅ VENDEDOR PAGA LIST_COST (VALOR REAL): R$ ${sellerCost}`);
       } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
         sellerCost = Number(option.seller_cost);
         calculationMethod = 'seller_cost_direto';
         console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
-      } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-        sellerCost = Number(option.base_cost);
-        calculationMethod = 'base_cost_frete_gratis_fallback';
-        console.log(`⚠️ VENDEDOR PAGA BASE_COST (pode ser valor Flex): R$ ${sellerCost}`);
       } else {
+        // ÚLTIMO RECURSO: estimar baseado no custo que seria cobrado do cliente
         sellerCost = Math.max(Number(option.cost) || 0, 10); // At least R$ 10
-        calculationMethod = 'frete_gratis_fallback';
-        console.log(`⚠️ VENDEDOR PAGA VALOR ESTIMADO: R$ ${sellerCost}`);
+        calculationMethod = 'frete_gratis_fallback_estimado';
+        console.log(`⚠️ VENDEDOR PAGA VALOR ESTIMADO (sem list_cost disponível): R$ ${sellerCost}`);
       }
     } else {
-      // PRIORITY 3: FRETE PAGO PELO COMPRADOR (sem desconto)
+      // PRIORITY 3: FRETE PAGO PELO COMPRADOR (sem desconto, sem frete grátis)
       paidBy = 'comprador';
       sellerCost = 0; // Seller pays nothing
       buyerCost = Number(option.cost) || 0; // Customer pays the listed cost
