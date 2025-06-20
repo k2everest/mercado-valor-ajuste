@@ -10,10 +10,14 @@ import { FreightCalculator } from "./FreightCalculator";
 import { SettingsPanel } from "./SettingsPanel";
 import { ApiTestPanel } from "./ApiTestPanel";
 import { Calculator, Package, Settings, TestTube, ShoppingCart } from "lucide-react";
+import { Product, PaginationInfo } from './types';
 
 export const Dashboard = () => {
   const { user } = useAuth();
   const [hasConnection, setHasConnection] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo | undefined>();
+  const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const token = localStorage.getItem('ml_access_token');
@@ -22,6 +26,37 @@ export const Dashboard = () => {
 
   const handleConnectionChange = (connected: boolean) => {
     setHasConnection(connected);
+    if (!connected) {
+      setProducts([]);
+      setPagination(undefined);
+    }
+  };
+
+  const handleConnect = (newProducts: Product[], newPagination?: PaginationInfo) => {
+    setProducts(newProducts);
+    setPagination(newPagination);
+  };
+
+  const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
+    setProducts(newProducts);
+    setPagination(newPagination);
+  };
+
+  const handleFreightCalculated = (productId: string, freightData: {
+    freightCost: number;
+    sellerFreightCost: number;
+    freightMethod: string;
+  }) => {
+    setProducts(prev => prev.map(product => {
+      if (product.id === productId) {
+        return {
+          ...product,
+          ...freightData,
+          adjustedPrice: undefined
+        };
+      }
+      return product;
+    }));
   };
 
   return (
@@ -68,12 +103,19 @@ export const Dashboard = () => {
           </TabsList>
 
           <TabsContent value="connection">
-            <MercadoLibreConnection onConnectionChange={handleConnectionChange} />
+            <MercadoLibreConnection 
+              onConnectionChange={handleConnectionChange}
+              onConnect={handleConnect}
+            />
           </TabsContent>
 
           <TabsContent value="products">
             {hasConnection ? (
-              <ProductsList />
+              <ProductsList 
+                products={products}
+                pagination={pagination}
+                onLoadMore={handleLoadMore}
+              />
             ) : (
               <Card>
                 <CardHeader>
@@ -87,7 +129,12 @@ export const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="calculator">
-            <FreightCalculator />
+            <FreightCalculator 
+              products={products}
+              onFreightCalculated={handleFreightCalculated}
+              loadingFreight={loadingFreight}
+              setLoadingFreight={setLoadingFreight}
+            />
           </TabsContent>
 
           <TabsContent value="test">

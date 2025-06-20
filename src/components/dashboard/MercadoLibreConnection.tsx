@@ -5,12 +5,14 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "@/hooks/use-toast";
 import { ShoppingCart, Shield, Zap, AlertCircle, RefreshCw, Unlink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Product, PaginationInfo } from './types';
 
 interface MercadoLibreConnectionProps {
-  onConnect: (products: any[]) => void;
+  onConnectionChange: (connected: boolean) => void;
+  onConnect: (products: Product[], pagination?: PaginationInfo) => void;
 }
 
-export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProps) => {
+export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: MercadoLibreConnectionProps) => {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const { t } = useLanguage();
@@ -30,6 +32,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         description: "Sua conta foi desconectada do Mercado Livre com sucesso",
       });
       
+      onConnectionChange(false);
       onConnect([]);
       
     } catch (error) {
@@ -72,7 +75,8 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         description: `${allProductsData.products?.length || 0} produtos importados do Mercado Livre`,
       });
 
-      onConnect(allProductsData.products || []);
+      onConnectionChange(true);
+      onConnect(allProductsData.products || [], allProductsData.pagination);
       return true;
 
     } catch (error: any) {
@@ -82,6 +86,7 @@ export const MercadoLibreConnection = ({ onConnect }: MercadoLibreConnectionProp
         console.log('🗑️ Removendo token inválido...');
         localStorage.removeItem('ml_access_token');
         localStorage.removeItem('ml_token_timestamp');
+        onConnectionChange(false);
         return false;
       }
       
