@@ -12,36 +12,16 @@ export class CostCalculator {
     let calculationMethod = '';
     let paidBy = '';
     
-    // PRIORITY 1: Handle reputation discount scenarios (seller always pays when there's a discount)
+    // PRIORITY 1: Handle reputation discount scenarios 
     if (hasReputationDiscount) {
-      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO DO VENDEDOR - Vendedor sempre paga o custo real');
+      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Vendedor paga valor COM desconto');
       paidBy = 'vendedor';
       buyerCost = Number(option.cost) || 0; // Customer pays the discounted amount (could be 0)
       
-      // CORREÇÃO: list_cost é o valor REAL que o vendedor paga (não base_cost!)
-      if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
-        sellerCost = Number(option.list_cost);
-        calculationMethod = 'list_cost_valor_real_vendedor';
-        console.log(`✅ VENDEDOR PAGA LIST_COST (valor REAL que vendedor paga): R$ ${sellerCost}`);
-      } 
-      // Se list_cost não disponível, calcular baseado no desconto
-      else if (option.discount?.promoted_amount && option.cost !== undefined) {
-        sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
-        calculationMethod = 'cost_plus_discount_amount';
-        console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
-      }
-      // Fallback usando base_cost só se não tiver outras opções
-      else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-        sellerCost = Number(option.base_cost);
-        calculationMethod = 'base_cost_fallback';
-        console.log(`⚠️ VENDEDOR PAGA BASE_COST (fallback - pode ser valor Flex): R$ ${sellerCost}`);
-      }
-      // LAST RESORT: use a reasonable estimate based on cost
-      else {
-        sellerCost = Math.max(Number(option.cost) || 0, 10); // At least R$ 10 or current cost
-        calculationMethod = 'desconto_reputacao_fallback_minimo';
-        console.log(`⚠️ VENDEDOR PAGA VALOR ESTIMADO (desconto reputação): R$ ${sellerCost}`);
-      }
+      // CORREÇÃO: Com desconto por reputação, vendedor paga o valor COM desconto (option.cost)
+      sellerCost = Number(option.cost) || 0;
+      calculationMethod = 'desconto_reputacao_valor_com_desconto';
+      console.log(`✅ VENDEDOR PAGA VALOR COM DESCONTO POR REPUTAÇÃO: R$ ${sellerCost}`);
     }
     // PRIORITY 2: Handle traditional free shipping (product declares it)
     else if (isReallyFreeShipping) {
