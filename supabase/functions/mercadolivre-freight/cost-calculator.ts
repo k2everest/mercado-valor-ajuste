@@ -18,23 +18,23 @@ export class CostCalculator {
       paidBy = 'vendedor';
       buyerCost = Number(option.cost) || 0; // Customer pays the discounted amount (could be 0)
       
-      // ALWAYS prioritize base_cost when there's a reputation discount
-      if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-        sellerCost = Number(option.base_cost);
-        calculationMethod = 'base_cost_com_desconto_reputacao';
-        console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto por reputação): R$ ${sellerCost}`);
-      } 
-      // If base_cost is not available, try to calculate from other fields
-      else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > Number(option.cost)) {
+      // CORREÇÃO: list_cost é o valor REAL que o vendedor paga (não base_cost!)
+      if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
         sellerCost = Number(option.list_cost);
-        calculationMethod = 'list_cost_com_desconto_reputacao';
-        console.log(`✅ VENDEDOR PAGA LIST_COST (valor antes do desconto): R$ ${sellerCost}`);
-      }
-      // Calculate from cost + discount amount if available
+        calculationMethod = 'list_cost_valor_real_vendedor';
+        console.log(`✅ VENDEDOR PAGA LIST_COST (valor REAL que vendedor paga): R$ ${sellerCost}`);
+      } 
+      // Se list_cost não disponível, calcular baseado no desconto
       else if (option.discount?.promoted_amount && option.cost !== undefined) {
         sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
         calculationMethod = 'cost_plus_discount_amount';
-        console.log(`✅ VENDEDOR PAGA COST + DESCONTO REPUTAÇÃO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
+        console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
+      }
+      // Fallback usando base_cost só se não tiver outras opções
+      else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+        sellerCost = Number(option.base_cost);
+        calculationMethod = 'base_cost_fallback';
+        console.log(`⚠️ VENDEDOR PAGA BASE_COST (fallback - pode ser valor Flex): R$ ${sellerCost}`);
       }
       // LAST RESORT: use a reasonable estimate based on cost
       else {
@@ -49,18 +49,19 @@ export class CostCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
+      // Para frete grátis tradicional, priorizar list_cost (valor real do vendedor)
       if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
         sellerCost = Number(option.list_cost);
         calculationMethod = 'list_cost_frete_gratis';
         console.log(`✅ VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
-      } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-        sellerCost = Number(option.base_cost);
-        calculationMethod = 'base_cost_frete_gratis';
-        console.log(`✅ VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
       } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
         sellerCost = Number(option.seller_cost);
         calculationMethod = 'seller_cost_direto';
         console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
+      } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+        sellerCost = Number(option.base_cost);
+        calculationMethod = 'base_cost_frete_gratis_fallback';
+        console.log(`⚠️ VENDEDOR PAGA BASE_COST (pode ser valor Flex): R$ ${sellerCost}`);
       } else {
         sellerCost = Math.max(Number(option.cost) || 0, 10); // At least R$ 10
         calculationMethod = 'frete_gratis_fallback';
