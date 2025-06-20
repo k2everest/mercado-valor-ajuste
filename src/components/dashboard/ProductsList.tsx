@@ -18,9 +18,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     productsCount: products.length,
     pagination,
     hasOnLoadMore: !!onLoadMore,
-    hasMore: pagination?.hasMore,
-    paginationTotal: pagination?.total,
-    showPagination: !!(pagination && pagination.hasMore && onLoadMore)
+    hasMore: pagination?.hasMore
   });
 
   const loadMoreProducts = async (limit: number) => {
@@ -206,18 +204,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     );
   }
 
-  // Check if we should show pagination - make this more explicit
-  const shouldShowPagination = pagination && pagination.hasMore && onLoadMore;
-
   return (
     <div className="space-y-6">
-      {/* Debug Information */}
-      {pagination && (
-        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-          Debug: Total: {pagination.total}, Loaded: {products.length}, HasMore: {pagination.hasMore ? 'Yes' : 'No'}, OnLoadMore: {onLoadMore ? 'Yes' : 'No'}, ShouldShow: {shouldShowPagination ? 'Yes' : 'No'}
-        </div>
-      )}
-
       {/* Freight Calculator */}
       <FreightCalculator
         products={products}
@@ -233,7 +221,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       />
 
       {/* Pagination Controls - Show at top when there are more products to load */}
-      {shouldShowPagination && (
+      {pagination && pagination.hasMore && onLoadMore && (
         <ProductsPagination
           pagination={pagination}
           onLoadMore={loadMoreProducts}
@@ -264,7 +252,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       </div>
 
       {/* Pagination Controls - Show at bottom too when there are more products to load */}
-      {shouldShowPagination && (
+      {pagination && pagination.hasMore && onLoadMore && (
         <ProductsPagination
           pagination={pagination}
           onLoadMore={loadMoreProducts}
