@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Calculator, Truck, RefreshCw } from "lucide-react";
 import { Product } from './types';
+import { useFreightChangeDetection } from '@/hooks/useFreightChangeDetection';
 
 interface FreightCalculatorProps {
   products: Product[];
@@ -14,7 +15,7 @@ interface FreightCalculatorProps {
     freightMethod: string;
   }) => void;
   loadingFreight: Record<string, boolean>;
-  setLoadingFreight: (loading: Record<string, boolean>) => void;
+  setLoadingFreight: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
 }
 
 // Standard ZIP code for São Paulo center (sender location)
@@ -26,7 +27,7 @@ export const FreightCalculator = ({
   loadingFreight, 
   setLoadingFreight 
 }: FreightCalculatorProps) => {
-  const [lastCalculationCheck, setLastCalculationCheck] = useState<string>('');
+  const { checkForChanges, markItemAsChanged, hasItemChanged, changedItemsCount } = useFreightChangeDetection();
 
   const getFreightCache = () => {
     return JSON.parse(localStorage.getItem('freight_calculations') || '{}');
@@ -36,53 +37,14 @@ export const FreightCalculator = ({
     localStorage.setItem('freight_calculations', JSON.stringify(cache));
   };
 
-  const getLastNotificationCheck = () => {
-    return localStorage.getItem('last_notification_check') || '';
-  };
-
-  const setLastNotificationCheck = (timestamp: string) => {
-    localStorage.setItem('last_notification_check', timestamp);
-  };
-
-  const checkForFreightChanges = async () => {
-    try {
-      console.log('🔍 Verificando mudanças de frete desde última verificação...');
-      
-      const lastCheck = getLastNotificationCheck();
-      const currentTime = new Date().toISOString();
-      
-      // Store current check time
-      setLastNotificationCheck(currentTime);
-      setLastCalculationCheck(currentTime);
-      
-      if (lastCheck) {
-        const timeDiff = new Date(currentTime).getTime() - new Date(lastCheck).getTime();
-        const hoursDiff = timeDiff / (1000 * 60 * 60);
-        
-        toast({
-          title: "🔍 Verificação de mudanças",
-          description: `Última verificação: ${hoursDiff.toFixed(1)} horas atrás`,
-        });
-      } else {
-        toast({
-          title: "🔍 Primeira verificação",
-          description: "Iniciando monitoramento de mudanças de frete",
-        });
-      }
-      
-    } catch (error) {
-      console.error('Erro ao verificar mudanças:', error);
-    }
-  };
-
   const fetchFreightCosts = async (productId: string, forceRecalculate = false) => {
     const calculationCache = getFreightCache();
-    const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000); // 48 hours cache
+    const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000); // 48 hours cache
     
     // Check if we have a recent calculation and don't need to force recalculate
     if (!forceRecalculate) {
       const cachedCalculation = calculationCache[productId];
-      if (cachedCalculation && cachedCalculation.timestamp > twoDaysAgo) {
+      if (cachedCalculation && cachedCalculation.timestamp > fortyEightHoursAgo) {
         console.log(`📋 Usando cálculo em cache para produto ${productId}`);
         onFreightCalculated(productId, {
           freightCost: cachedCalculation.freightCost,
@@ -90,9 +52,10 @@ export const FreightCalculator = ({
           freightMethod: cachedCalculation.freightMethod
         });
         
+        const hoursAgo = Math.round((Date.now() - cachedCalculation.timestamp) / (1000 * 60 * 60));
         toast({
           title: "📋 Valor em cache",
-          description: `Usando cálculo salvo (${Math.round((Date.now() - cachedCalculation.timestamp) / (1000 * 60 * 60))}h atrás)`,
+          description: `Usando cálculo salvo (${hoursAgo}h atrás)`,
         });
         return;
       }
@@ -174,7 +137,7 @@ export const FreightCalculator = ({
   };
 
   const calculateAllFreights = async (forceRecalculate = false) => {
-    await checkForFreightChanges();
+    await checkForChanges();
     
     for (const product of products) {
       if (!loadingFreight[product.id]) {
@@ -197,6 +160,11 @@ export const FreightCalculator = ({
         <CardTitle className="flex items-center gap-2 text-white">
           <Calculator className="h-5 w-5" />
           Calculadora de Frete Real
+          {changedItemsCount > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+              {changedItemsCount} alterados
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -206,12 +174,6 @@ export const FreightCalculator = ({
             <br />
             <span className="text-sm opacity-75">CEP padrão: {STANDARD_ZIP_CODE} (valores salvos por 48h)</span>
           </p>
-          
-          {lastCalculationCheck && (
-            <p className="text-blue-200 text-sm">
-              Última verificação: {new Date(lastCalculationCheck).toLocaleString('pt-BR')}
-            </p>
-          )}
           
           <div className="flex flex-wrap gap-2">
             <Button
