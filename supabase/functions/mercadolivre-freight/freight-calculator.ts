@@ -1,3 +1,4 @@
+
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -28,28 +29,28 @@ export class FreightCalculator {
       
       console.log('É Mercado Envios Padrão?', isMercadoEnviosPadrao);
       
-      // CORREÇÃO FUNDAMENTAL: Determine who pays for shipping
+      // CORREÇÃO: Determine who pays for shipping based on reputation discount
       const productHasFreeShipping = product.shipping?.free_shipping === true;
       const optionCost = Number(option.cost) || 0;
       
-      // Check if there's a loyalty discount that makes shipping "free" for customer
-      const hasLoyaltyDiscount = option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0;
+      // Check if there's a reputation discount that makes shipping cheaper for customer
+      const hasReputationDiscount = option.discount?.type && option.discount?.promoted_amount > 0;
       
       // Free shipping if:
       // 1. Product declares it AND option cost is 0, OR
-      // 2. There's a loyalty discount that reduces cost to 0 (seller absorbs the cost)
+      // 2. There's a reputation discount that reduces cost to 0 (seller absorbs the cost)
       const isReallyFreeShipping = (productHasFreeShipping && optionCost === 0) || 
-                                   (hasLoyaltyDiscount && optionCost === 0);
+                                   (hasReputationDiscount && optionCost === 0);
       
       console.log('Produto tem frete grátis:', productHasFreeShipping);
       console.log('Opção tem custo zero:', optionCost === 0);
-      console.log('Tem desconto por reputação:', hasLoyaltyDiscount);
+      console.log('Tem desconto por reputação:', hasReputationDiscount);
       console.log('É realmente frete grátis?', isReallyFreeShipping);
       
       const costCalculation = this.calculateRealCost(
         option, 
         isReallyFreeShipping,
-        hasLoyaltyDiscount
+        hasReputationDiscount
       );
       
       return {
@@ -73,16 +74,16 @@ export class FreightCalculator {
   private static calculateRealCost(
     option: ShippingOption,
     isReallyFreeShipping: boolean,
-    hasLoyaltyDiscount: boolean = false
+    hasReputationDiscount: boolean = false
   ): { sellerCost: number; buyerCost: number; calculationMethod: string; paidBy: string } {
     let sellerCost = 0;
     let buyerCost = 0;
     let calculationMethod = '';
     let paidBy = '';
     
-    // PRIORITY 1: Handle loyalty discount scenarios (seller always pays when there's a discount)
-    if (hasLoyaltyDiscount) {
-      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Vendedor sempre paga o custo real');
+    // PRIORITY 1: Handle reputation discount scenarios (seller always pays when there's a discount)
+    if (hasReputationDiscount) {
+      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO DO VENDEDOR - Vendedor sempre paga o custo real');
       paidBy = 'vendedor';
       buyerCost = Number(option.cost) || 0; // Customer pays the discounted amount (could be 0)
       
@@ -90,13 +91,13 @@ export class FreightCalculator {
       if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
         sellerCost = Number(option.base_cost);
         calculationMethod = 'base_cost_com_desconto_reputacao';
-        console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
+        console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto por reputação): R$ ${sellerCost}`);
       } 
       // If no base_cost, calculate from cost + discount amount
       else if (option.discount?.promoted_amount && option.cost !== undefined) {
         sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
         calculationMethod = 'cost_plus_discount_amount';
-        console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
+        console.log(`✅ VENDEDOR PAGA COST + DESCONTO REPUTAÇÃO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
       }
       // Fallback to list_cost
       else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
@@ -107,8 +108,8 @@ export class FreightCalculator {
       // LAST RESORT: use a reasonable default
       else {
         sellerCost = Math.max(Number(option.cost) || 0, 10); // At least R$ 10
-        calculationMethod = 'desconto_fallback_minimo';
-        console.log(`⚠️ VENDEDOR PAGA VALOR MÍNIMO ESTIMADO: R$ ${sellerCost}`);
+        calculationMethod = 'desconto_reputacao_fallback_minimo';
+        console.log(`⚠️ VENDEDOR PAGA VALOR MÍNIMO ESTIMADO (desconto reputação): R$ ${sellerCost}`);
       }
     }
     // PRIORITY 2: Handle traditional free shipping (product declares it)
