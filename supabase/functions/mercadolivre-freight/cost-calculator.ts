@@ -14,14 +14,26 @@ export class CostCalculator {
     
     // PRIORITY 1: Handle reputation discount scenarios 
     if (hasReputationDiscount) {
-      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Vendedor paga valor COM desconto');
+      console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Calculando custo real do vendedor');
       paidBy = 'vendedor';
-      buyerCost = Number(option.cost) || 0; // Customer pays the discounted amount (could be 0)
+      buyerCost = Number(option.cost) || 0; // Customer pays the discounted amount
       
-      // CORREÇÃO: Com desconto por reputação, vendedor paga o valor COM desconto (option.cost)
-      sellerCost = Number(option.cost) || 0;
-      calculationMethod = 'desconto_reputacao_valor_com_desconto';
-      console.log(`✅ VENDEDOR PAGA VALOR COM DESCONTO POR REPUTAÇÃO: R$ ${sellerCost}`);
+      // CORREÇÃO FUNDAMENTAL: Com desconto por reputação, vendedor paga base_cost MENOS promoted_amount
+      // Exemplo: base_cost R$ 46,90 - promoted_amount R$ 23,45 = vendedor paga R$ 23,45
+      if (option.discount && option.discount.promoted_amount > 0 && option.base_cost > 0) {
+        const realSellerCost = Number(option.base_cost) - Number(option.discount.promoted_amount);
+        sellerCost = Math.max(realSellerCost, 0); // Never negative
+        calculationMethod = 'desconto_reputacao_base_menos_promoted';
+        console.log(`✅ VENDEDOR PAGA (base_cost R$ ${option.base_cost} - promoted_amount R$ ${option.discount.promoted_amount}): R$ ${sellerCost}`);
+      } else if (option.base_cost > 0) {
+        sellerCost = Number(option.base_cost);
+        calculationMethod = 'desconto_reputacao_base_cost_full';
+        console.log(`✅ VENDEDOR PAGA BASE_COST COMPLETO: R$ ${sellerCost}`);
+      } else {
+        sellerCost = Number(option.cost) || 0;
+        calculationMethod = 'desconto_reputacao_cost_fallback';
+        console.log(`⚠️ VENDEDOR PAGA COST (fallback): R$ ${sellerCost}`);
+      }
     }
     // PRIORITY 2: Handle traditional free shipping (product declares it)
     else if (isReallyFreeShipping) {
@@ -29,8 +41,7 @@ export class CostCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // CORREÇÃO FUNDAMENTAL: Para frete grátis tradicional, usar SEMPRE list_cost (valor real do vendedor)
-      // NUNQUER usar base_cost que é valor do Flex!
+      // Para frete grátis tradicional, usar list_cost (valor real do vendedor)
       if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
         sellerCost = Number(option.list_cost);
         calculationMethod = 'list_cost_frete_gratis_valor_real';
@@ -40,7 +51,7 @@ export class CostCalculator {
         calculationMethod = 'seller_cost_direto';
         console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
       } else {
-        // ÚLTIMO RECURSO: estimar baseado no custo que seria cobrado do cliente
+        // Último recurso: estimar baseado no custo que seria cobrado do cliente
         sellerCost = Math.max(Number(option.cost) || 0, 10); // At least R$ 10
         calculationMethod = 'frete_gratis_fallback_estimado';
         console.log(`⚠️ VENDEDOR PAGA VALOR ESTIMADO (sem list_cost disponível): R$ ${sellerCost}`);

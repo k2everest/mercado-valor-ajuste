@@ -19,6 +19,7 @@ export const Dashboard = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [hasLoadedProducts, setHasLoadedProducts] = useState(false); // NEW: track if products were loaded via sync
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -65,10 +66,10 @@ export const Dashboard = () => {
         return;
       }
 
-      console.log('✅ Token válido, carregando dados...');
+      console.log('✅ Token válido, usuário conectado');
       setIsConnected(true);
       
-      // Load cached data first
+      // Load cached data if available but don't show pagination until manual sync
       const storedProducts = localStorage.getItem('ml_products_cache');
       const storedLastSync = localStorage.getItem('ml_last_sync');
       
@@ -79,17 +80,12 @@ export const Dashboard = () => {
           setProducts(cached.products || []);
           setPagination(cached.pagination || null);
           setLastSync(storedLastSync);
+          setHasLoadedProducts(true); // Mark as loaded from cache
         } catch (error) {
           console.error('Erro ao carregar cache:', error);
           localStorage.removeItem('ml_products_cache');
           localStorage.removeItem('ml_last_sync');
         }
-      }
-
-      // If no cached data, load fresh data
-      if (!storedProducts) {
-        console.log('📥 Nenhum cache encontrado, carregando dados frescos...');
-        await loadProducts();
       }
 
     } catch (error) {
@@ -177,6 +173,7 @@ export const Dashboard = () => {
 
       setProducts(data.products || []);
       setPagination(data.pagination || null);
+      setHasLoadedProducts(true); // NEW: Mark as loaded via sync
 
       // Cache the results
       const cacheData = {
@@ -227,6 +224,7 @@ export const Dashboard = () => {
     setIsConnected(true);
     setConnectionError(null);
     setLastSync(new Date().toISOString());
+    setHasLoadedProducts(true); // NEW: Mark as loaded via connection
     
     // Store token timestamp when connecting
     localStorage.setItem('ml_token_timestamp', Date.now().toString());
@@ -334,7 +332,7 @@ export const Dashboard = () => {
           <TabsTrigger value="products" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             Produtos ({products.length})
-            {pagination && pagination.hasMore && (
+            {pagination && pagination.hasMore && hasLoadedProducts && (
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full ml-1">
                 +{pagination.total - products.length}
               </span>
@@ -383,7 +381,7 @@ export const Dashboard = () => {
           ) : (
             <ProductsList 
               products={products} 
-              pagination={pagination}
+              pagination={hasLoadedProducts ? pagination : null}
               onLoadMore={handleLoadMore}
             />
           )}
