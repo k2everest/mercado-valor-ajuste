@@ -77,32 +77,38 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // FIXED LOGIC FOR REPUTATION DISCOUNT
-      // When there's a loyalty discount, seller ALWAYS pays the base_cost (pre-discount value)
+      // ENHANCED LOGIC FOR REPUTATION DISCOUNT - Handle different percentages
       if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
-        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Vendedor paga base_cost SEMPRE');
+        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Calculando valor correto');
         console.log('Desconto detectado:', option.discount);
         
-        // ALWAYS use base_cost when there's a reputation discount
-        if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-          sellerCost = Number(option.base_cost);
-          calculationMethod = 'base_cost_com_desconto_reputacao';
-          console.log(`✅ VENDEDOR PAGA BASE_COST (valor real antes do desconto): R$ ${sellerCost}`);
-        } 
-        // If no base_cost, calculate from cost + discount amount
-        else if (option.discount?.promoted_amount && option.cost !== undefined) {
-          sellerCost = Number(option.cost) + Number(option.discount.promoted_amount);
-          calculationMethod = 'cost_plus_discount_amount';
-          console.log(`✅ VENDEDOR PAGA COST + DESCONTO: R$ ${option.cost} + R$ ${option.discount.promoted_amount} = R$ ${sellerCost}`);
-        }
-        // Fallback to list_cost
-        else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
-          sellerCost = Number(option.list_cost);
-          calculationMethod = 'list_cost_com_desconto_reputacao';
-          console.log(`✅ VENDEDOR PAGA LIST_COST (fallback): R$ ${sellerCost}`);
-        } 
-        // LAST RESORT: use cost even with discount
-        else {
+        const baseCost = Number(option.base_cost) || Number(option.list_cost) || 0;
+        const discountAmount = Number(option.discount.promoted_amount) || 0;
+        const discountRate = Number(option.discount.rate) || 0;
+        
+        console.log('Base Cost Original:', baseCost);
+        console.log('Discount Amount (promoted_amount):', discountAmount);
+        console.log('Discount Rate:', discountRate);
+        
+        // Calculate seller cost with reputation discount
+        if (discountRate > 0 && baseCost > 0) {
+          // Calculate discount based on rate percentage
+          const calculatedDiscount = baseCost * (discountRate / 100);
+          sellerCost = baseCost - calculatedDiscount;
+          calculationMethod = `base_cost_menos_${discountRate}%_desconto_reputacao`;
+          console.log(`✅ VENDEDOR PAGA COM ${discountRate}% DESCONTO: R$ ${baseCost} - ${discountRate}% = R$ ${sellerCost.toFixed(2)}`);
+        } else if (discountAmount > 0 && baseCost > 0) {
+          // Use promoted_amount as direct discount
+          sellerCost = baseCost - discountAmount;
+          calculationMethod = 'base_cost_menos_promoted_amount';
+          console.log(`✅ VENDEDOR PAGA COM DESCONTO FIXO: R$ ${baseCost} - R$ ${discountAmount} = R$ ${sellerCost.toFixed(2)}`);
+        } else if (baseCost > 0) {
+          // Fallback to base cost
+          sellerCost = baseCost;
+          calculationMethod = 'base_cost_sem_desconto_aplicado';
+          console.log(`⚠️ VENDEDOR PAGA BASE_COST (sem desconto aplicado): R$ ${sellerCost}`);
+        } else {
+          // Last resort
           sellerCost = Number(option.cost) || 0;
           calculationMethod = 'cost_fallback_com_desconto';
           console.log(`⚠️ VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
