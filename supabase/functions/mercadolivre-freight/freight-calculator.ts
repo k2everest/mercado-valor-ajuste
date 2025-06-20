@@ -1,4 +1,3 @@
-
 import { Product, ShippingOption, ProcessedFreightOption } from './types.ts';
 
 export class FreightCalculator {
@@ -77,61 +76,31 @@ export class FreightCalculator {
       paidBy = 'vendedor';
       buyerCost = 0; // Customer pays nothing
       
-      // ENHANCED LOGIC FOR REPUTATION DISCOUNT - Handle different percentages
-      if (option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0) {
-        console.log('🎯 DETECTADO DESCONTO POR REPUTAÇÃO - Calculando valor correto');
-        console.log('Desconto detectado:', option.discount);
-        
-        const baseCost = Number(option.base_cost) || Number(option.list_cost) || 0;
-        const discountAmount = Number(option.discount.promoted_amount) || 0;
-        const discountRate = Number(option.discount.rate) || 0;
-        
-        console.log('Base Cost Original:', baseCost);
-        console.log('Discount Amount (promoted_amount):', discountAmount);
-        console.log('Discount Rate:', discountRate);
-        
-        // Calculate seller cost with reputation discount
-        if (discountRate > 0 && baseCost > 0) {
-          // Calculate discount based on rate percentage
-          const calculatedDiscount = baseCost * (discountRate / 100);
-          sellerCost = baseCost - calculatedDiscount;
-          calculationMethod = `base_cost_menos_${discountRate}%_desconto_reputacao`;
-          console.log(`✅ VENDEDOR PAGA COM ${discountRate}% DESCONTO: R$ ${baseCost} - ${discountRate}% = R$ ${sellerCost.toFixed(2)}`);
-        } else if (discountAmount > 0 && baseCost > 0) {
-          // Use promoted_amount as direct discount
-          sellerCost = baseCost - discountAmount;
-          calculationMethod = 'base_cost_menos_promoted_amount';
-          console.log(`✅ VENDEDOR PAGA COM DESCONTO FIXO: R$ ${baseCost} - R$ ${discountAmount} = R$ ${sellerCost.toFixed(2)}`);
-        } else if (baseCost > 0) {
-          // Fallback to base cost
-          sellerCost = baseCost;
-          calculationMethod = 'base_cost_sem_desconto_aplicado';
-          console.log(`⚠️ VENDEDOR PAGA BASE_COST (sem desconto aplicado): R$ ${sellerCost}`);
-        } else {
-          // Last resort
-          sellerCost = Number(option.cost) || 0;
-          calculationMethod = 'cost_fallback_com_desconto';
-          console.log(`⚠️ VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
-        }
+      // FIXED LOGIC: Don't assume all discounts are loyalty discounts
+      // For free shipping, seller pays the actual shipping cost
+      console.log('📦 FRETE GRÁTIS - Calculando custo real do vendedor');
+      
+      if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
+        sellerCost = Number(option.base_cost);
+        calculationMethod = 'base_cost_frete_gratis';
+        console.log(`✅ VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
+      } else if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
+        sellerCost = Number(option.list_cost);
+        calculationMethod = 'list_cost_frete_gratis';
+        console.log(`✅ VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
+      } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
+        sellerCost = Number(option.seller_cost);
+        calculationMethod = 'seller_cost_direto';
+        console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
       } else {
-        // NO LOYALTY DISCOUNT - use normal hierarchy
-        console.log('📋 SEM DESCONTO POR REPUTAÇÃO - Usando hierarquia normal');
-        
-        if (option.list_cost !== undefined && option.list_cost !== null && option.list_cost > 0) {
-          sellerCost = Number(option.list_cost);
-          calculationMethod = 'list_cost_original';
-          console.log(`✅ VENDEDOR PAGA LIST_COST: R$ ${sellerCost}`);
-        } else if (option.base_cost !== undefined && option.base_cost !== null && option.base_cost > 0) {
-          sellerCost = Number(option.base_cost);
-          calculationMethod = 'base_cost_fallback';
-          console.log(`✅ VENDEDOR PAGA BASE_COST: R$ ${sellerCost}`);
-        } else if (option.seller_cost !== undefined && option.seller_cost !== null && option.seller_cost > 0) {
-          sellerCost = Number(option.seller_cost);
-          calculationMethod = 'seller_cost_direto';
-          console.log(`✅ VENDEDOR PAGA SELLER_COST: R$ ${sellerCost}`);
+        // If we have a discount with promoted_amount, use it as the seller cost
+        if (option.discount?.promoted_amount && option.discount.promoted_amount > 0) {
+          sellerCost = Number(option.discount.promoted_amount);
+          calculationMethod = 'discount_promoted_amount';
+          console.log(`✅ VENDEDOR PAGA PROMOTED_AMOUNT: R$ ${sellerCost}`);
         } else {
           sellerCost = Number(option.cost) || 0;
-          calculationMethod = 'cost_last_resort';
+          calculationMethod = 'cost_fallback_frete_gratis';
           console.log(`⚠️ VENDEDOR PAGA COST (último recurso): R$ ${sellerCost}`);
         }
       }
