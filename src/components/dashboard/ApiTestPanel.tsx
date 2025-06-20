@@ -15,6 +15,8 @@ export const ApiTestPanel = () => {
   const [result, setResult] = useState<any>(null);
 
   const testApi = async () => {
+    if (loading) return; // Previne execução dupla
+    
     setLoading(true);
     setResult(null);
 
@@ -24,33 +26,37 @@ export const ApiTestPanel = () => {
         throw new Error('Token de acesso não encontrado. Conecte-se ao Mercado Livre primeiro.');
       }
 
-      console.log('🧪 TESTANDO API MERCADO LIVRE');
+      console.log('🧪 Iniciando teste da API...');
       console.log('Product ID:', productId);
       console.log('CEP:', zipCode);
 
       const { data, error } = await supabase.functions.invoke('test-ml-api', {
         body: {
-          productId,
-          zipCode,
+          productId: productId.trim(),
+          zipCode: zipCode.trim(),
           accessToken
         }
       });
 
       if (error) {
-        console.error('Erro da função:', error);
-        throw new Error(`Erro: ${error.message}`);
+        console.error('❌ Erro da função:', error);
+        throw new Error(`Erro na função: ${error.message}`);
       }
 
-      console.log('✅ RESPOSTA RECEBIDA:', data);
+      if (!data.success) {
+        throw new Error(data.error || 'Erro desconhecido');
+      }
+
+      console.log('✅ Teste concluído com sucesso');
       setResult(data);
 
       toast({
         title: "✅ Teste concluído!",
-        description: `${data.summary?.totalOptions || 0} opções encontradas`,
+        description: `${data.summary?.totalOptions || 0} opções de frete encontradas`,
       });
 
     } catch (error: any) {
-      console.error('❌ ERRO NO TESTE:', error);
+      console.error('❌ Erro no teste:', error);
       toast({
         title: "❌ Erro no teste",
         description: error.message,
@@ -80,6 +86,7 @@ export const ApiTestPanel = () => {
                 onChange={(e) => setProductId(e.target.value)}
                 className="bg-white/20 text-white placeholder:text-white/60 border-white/30"
                 placeholder="690488868"
+                disabled={loading}
               />
             </div>
             <div>
@@ -90,6 +97,7 @@ export const ApiTestPanel = () => {
                 onChange={(e) => setZipCode(e.target.value)}
                 className="bg-white/20 text-white placeholder:text-white/60 border-white/30"
                 placeholder="01310-100"
+                disabled={loading}
               />
             </div>
           </div>
@@ -97,7 +105,7 @@ export const ApiTestPanel = () => {
           <Button
             onClick={testApi}
             disabled={loading}
-            className="w-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+            className="w-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm disabled:opacity-50"
           >
             {loading ? (
               <>
@@ -114,14 +122,32 @@ export const ApiTestPanel = () => {
 
           {result && (
             <div className="mt-4 p-4 bg-black/20 rounded-lg">
-              <h3 className="font-semibold mb-2">Resultado do Teste:</h3>
+              <h3 className="font-semibold mb-2">✅ Resultado do Teste:</h3>
               <div className="text-sm space-y-1">
                 <p>📦 Produto: {result.productId}</p>
                 <p>📍 CEP: {result.zipCode}</p>
-                <p>🚚 Opções encontradas: {result.summary?.totalOptions || 0}</p>
-                <p>💰 Com desconto de reputação: {result.summary?.hasLoyalDiscount ? 'Sim' : 'Não'}</p>
+                <p>🚚 Total de opções: {result.summary?.totalOptions || 0}</p>
+                <p>🆓 Opções gratuitas: {result.summary?.freeShippingOptions || 0}</p>
+                <p>💰 Com desconto loyalty: {result.summary?.hasLoyalDiscount ? 'Sim' : 'Não'}</p>
                 <p>📊 Com base_cost: {result.summary?.optionsWithBaseCost || 0}</p>
               </div>
+              
+              {result.processedOptions && result.processedOptions.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="font-medium mb-2">📋 Opções Detalhadas:</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {result.processedOptions.map((option: any) => (
+                      <div key={option.index} className="text-xs bg-black/30 p-2 rounded">
+                        <p><strong>{option.name}</strong> (ID: {option.shippingMethodId})</p>
+                        <p>💰 Custo: R$ {option.cost} | Base: R$ {option.baseCost}</p>
+                        {option.hasLoyalDiscount && (
+                          <p>🎯 Desconto: {option.discountRate * 100}% (R$ {option.promotedAmount})</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <details className="mt-2">
                 <summary className="cursor-pointer text-sm font-medium">Ver resposta completa da API</summary>
