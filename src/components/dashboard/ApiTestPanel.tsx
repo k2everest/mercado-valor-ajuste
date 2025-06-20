@@ -15,7 +15,11 @@ export const ApiTestPanel = () => {
   const [result, setResult] = useState<any>(null);
 
   const testApi = async () => {
-    if (loading) return; // Previne execução dupla
+    // Previne execução dupla
+    if (loading) {
+      console.log('⚠️ Teste já em execução, ignorando nova chamada');
+      return;
+    }
     
     setLoading(true);
     setResult(null);
@@ -30,30 +34,51 @@ export const ApiTestPanel = () => {
       console.log('Product ID:', productId);
       console.log('CEP:', zipCode);
 
-      const { data, error } = await supabase.functions.invoke('test-ml-api', {
-        body: {
-          productId: productId.trim(),
-          zipCode: zipCode.trim(),
-          accessToken
+      // Usando timeout para evitar chamadas pendentes
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos
+
+      try {
+        const { data, error } = await supabase.functions.invoke('test-ml-api', {
+          body: {
+            productId: productId.trim(),
+            zipCode: zipCode.trim(),
+            accessToken
+          }
+        });
+
+        clearTimeout(timeoutId);
+
+        if (error) {
+          console.error('❌ Erro da função Supabase:', error);
+          throw new Error(`Erro na função: ${error.message}`);
         }
-      });
 
-      if (error) {
-        console.error('❌ Erro da função:', error);
-        throw new Error(`Erro na função: ${error.message}`);
+        console.log('📡 Resposta da função:', data);
+
+        if (!data) {
+          throw new Error('Nenhuma resposta recebida da função');
+        }
+
+        if (!data.success) {
+          throw new Error(data.error || 'Erro desconhecido na API');
+        }
+
+        console.log('✅ Teste concluído com sucesso');
+        setResult(data);
+
+        toast({
+          title: "✅ Teste concluído!",
+          description: `${data.summary?.totalOptions || 0} opções de frete encontradas`,
+        });
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Timeout: A requisição demorou muito para responder');
+        }
+        throw fetchError;
       }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro desconhecido');
-      }
-
-      console.log('✅ Teste concluído com sucesso');
-      setResult(data);
-
-      toast({
-        title: "✅ Teste concluído!",
-        description: `${data.summary?.totalOptions || 0} opções de frete encontradas`,
-      });
 
     } catch (error: any) {
       console.error('❌ Erro no teste:', error);
@@ -104,7 +129,7 @@ export const ApiTestPanel = () => {
 
           <Button
             onClick={testApi}
-            disabled={loading}
+            disabled={loading || !productId.trim() || !zipCode.trim()}
             className="w-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm disabled:opacity-50"
           >
             {loading ? (
