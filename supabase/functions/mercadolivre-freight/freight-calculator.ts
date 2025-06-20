@@ -32,12 +32,14 @@ export class FreightCalculator {
       // CORREÇÃO FUNDAMENTAL: Determine who pays for shipping
       const productHasFreeShipping = product.shipping?.free_shipping === true;
       const optionCost = Number(option.cost) || 0;
+      const hasLoyaltyDiscount = option.discount?.type === 'loyal' && option.discount?.promoted_amount > 0;
       
-      // Free shipping only if product declares it AND option cost is 0
-      const isReallyFreeShipping = productHasFreeShipping && optionCost === 0;
+      // FIXED: Free shipping logic - if product declares free shipping OR customer cost is 0 OR there's loyalty discount
+      const isReallyFreeShipping = productHasFreeShipping || optionCost === 0 || hasLoyaltyDiscount;
       
       console.log('Produto tem frete grátis:', productHasFreeShipping);
       console.log('Opção tem custo zero:', optionCost === 0);
+      console.log('Tem desconto por reputação:', hasLoyaltyDiscount);
       console.log('É realmente frete grátis?', isReallyFreeShipping);
       
       const costCalculation = this.calculateRealCost(
