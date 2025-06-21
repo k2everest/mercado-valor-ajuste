@@ -10,7 +10,7 @@ export const useFreightCalculation = () => {
     if (!zipCode || zipCode.trim().length === 0) {
       toast({
         title: "❌ CEP obrigatório",
-        description: "Digite um CEP válido para calcular o frete real",
+        description: "Digite um CEP válido para calcular o frete",
         variant: "destructive"
       });
       return null;
@@ -29,16 +29,16 @@ export const useFreightCalculation = () => {
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
     try {
-      console.log('🚚 INICIANDO CÁLCULO DE FRETE REAL DA API MERCADO LIVRE');
-      console.log('📍 Produto ID:', productId);
-      console.log('📍 CEP limpo:', cleanZipCode);
+      console.log('🚚 CALCULANDO FRETE REAL - API OFICIAL ML');
+      console.log('📦 Produto:', productId);
+      console.log('📍 CEP:', cleanZipCode);
       
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
 
-      console.log('🔑 Token encontrado, chamando API com melhorias...');
+      console.log('🔄 Chamando função corrigida...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
@@ -50,48 +50,39 @@ export const useFreightCalculation = () => {
       });
 
       if (error) {
-        console.error('❌ ERRO DA FUNÇÃO SUPABASE:', error);
+        console.error('❌ Erro na função:', error);
         throw new Error(`Erro da API: ${error.message}`);
       }
 
-      console.log('📦 RESPOSTA COMPLETA DA API MELHORADA:', JSON.stringify(data, null, 2));
+      console.log('📦 Resposta da API corrigida:', JSON.stringify(data, null, 2));
       
-      const selectedOption = data?.selectedOption || data?.freightOptions?.[0];
-      
-      if (!selectedOption) {
-        console.error('❌ NENHUMA OPÇÃO VÁLIDA DE FRETE RETORNADA');
-        throw new Error('API do Mercado Livre não retornou opções de frete válidas');
+      if (!data?.selectedOption) {
+        console.error('❌ Nenhuma opção selecionada na resposta');
+        throw new Error('API não retornou opção de frete válida');
       }
 
-      if (selectedOption.price === undefined || selectedOption.sellerCost === undefined) {
-        console.error('❌ VALORES INVÁLIDOS NA RESPOSTA DA API:', selectedOption);
-        throw new Error('API retornou valores inválidos para o frete');
-      }
-
-      if (typeof selectedOption.price !== 'number' || typeof selectedOption.sellerCost !== 'number') {
-        console.error('❌ VALORES NÃO SÃO NUMÉRICOS:', {
-          price: typeof selectedOption.price,
-          sellerCost: typeof selectedOption.sellerCost
-        });
-        throw new Error('API retornou valores não numéricos para o frete');
-      }
-
-      const finalCustomerCost = Number(selectedOption.price);
-      const finalSellerCost = Number(selectedOption.sellerCost);
-
-      console.log('✅ VALORES FINAIS CONFIRMADOS DA API MERCADO LIVRE:');
-      console.log('- Custo Final Cliente:', finalCustomerCost);
-      console.log('- Custo Final Vendedor:', finalSellerCost);
-      console.log('- Método Final:', selectedOption.method);
-
-      const discountInfo = selectedOption.discount ? ` (com desconto: ${selectedOption.discount})` : '';
+      const selectedOption = data.selectedOption;
       
+      // Validar dados da resposta
+      if (typeof selectedOption.price !== 'number' || 
+          typeof selectedOption.sellerCost !== 'number') {
+        console.error('❌ Dados inválidos na resposta:', selectedOption);
+        throw new Error('API retornou dados de frete inválidos');
+      }
+
+      const finalCustomerCost = selectedOption.price;
+      const finalSellerCost = selectedOption.sellerCost;
+
+      console.log('✅ RESULTADO FINAL DA API OFICIAL:');
+      console.log('- Preço Cliente:', finalCustomerCost);
+      console.log('- Custo Vendedor:', finalSellerCost);
+      console.log('- Método:', selectedOption.method);
+      console.log('- Pago por:', selectedOption.paidBy);
+
       toast({
-        title: "✅ Custo REAL calculado com sucesso!",
-        description: `${selectedOption.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)}${discountInfo}`,
+        title: "✅ Frete calculado com API oficial!",
+        description: `${selectedOption.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)}`,
       });
-
-      console.log('🎉 CÁLCULO FINALIZADO - VALORES REAIS DA API APLICADOS');
 
       return {
         freightCost: finalCustomerCost,
@@ -100,11 +91,11 @@ export const useFreightCalculation = () => {
       };
 
     } catch (error: any) {
-      console.error('💥 ERRO COMPLETO NO CÁLCULO:', error);
+      console.error('💥 ERRO NO CÁLCULO:', error);
       
       toast({
-        title: "❌ Erro ao calcular frete real",
-        description: `Erro: ${error.message}`,
+        title: "❌ Erro ao calcular frete",
+        description: error.message,
         variant: "destructive"
       });
       return null;

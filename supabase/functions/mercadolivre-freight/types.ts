@@ -15,35 +15,34 @@ export interface SellerData {
   };
 }
 
+// Interface baseada na documentação oficial ML
 export interface ShippingOption {
   name?: string;
   shipping_method_id?: string | number;
-  cost?: number;
-  base_cost?: number;
-  list_cost?: number;
-  seller_cost?: number;
+  cost?: number;           // Custo que o comprador vê/paga
+  list_cost?: number;      // Custo real do frete (campo oficial da API)
+  estimated_delivery_time?: {
+    date?: string;
+  };
   discount?: {
     promoted_amount?: number;
     rate?: number;
-  };
-  estimated_delivery_time?: {
-    date?: string;
+    type?: string;
   };
 }
 
 export interface ProcessedFreightOption {
   method: string;
   carrier: string;
-  price: number;
-  sellerCost: number;
-  buyerCost: number;
+  price: number;           // Preço que o cliente vê
+  sellerCost: number;      // Custo real para o vendedor
+  buyerCost: number;       // Custo para o comprador
   deliveryTime: string;
   isFreeShipping: boolean;
   paidBy: string;
   source: string;
   rawData: any;
   discount: any;
-  isMercadoEnviosPadrao: boolean;
   calculationMethod: string;
 }
 

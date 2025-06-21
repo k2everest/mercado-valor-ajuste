@@ -16,10 +16,11 @@ serve(async (req) => {
 
   try {
     const { action, productId, zipCode, accessToken }: FreightCalculationRequest = await req.json();
-    console.log('=== INÍCIO DO CÁLCULO DE FRETE ===');
-    console.log('Action:', action);
+    
+    console.log('=== CÁLCULO DE FRETE MERCADO LIVRE ===');
     console.log('Product ID:', productId);
-    console.log('ZIP Code:', zipCode);
+    console.log('CEP:', zipCode);
+    console.log('Action:', action);
     
     if (!accessToken) {
       throw new Error('Token de acesso é obrigatório');
@@ -32,52 +33,43 @@ serve(async (req) => {
 
       const apiService = new MercadoLibreApiService(accessToken);
       
-      // Get product and seller details
+      // 1. Buscar dados do produto
+      console.log('📦 Buscando dados do produto...');
       const product = await apiService.getProduct(productId);
+      
+      // 2. Buscar dados do vendedor (opcional)
+      console.log('👤 Buscando dados do vendedor...');
       const sellerData = await apiService.getSeller(product.seller_id);
 
-      // Try to get shipping options
-      let freightOptions = [];
+      // 3. Buscar opções de frete
+      console.log('🚚 Buscando opções de frete...');
+      const shippingOptions = await apiService.getShippingOptions(productId, zipCode);
 
-      // Method 1: Direct shipping options
-      const directOptions = await apiService.getDirectShippingOptions(productId, zipCode);
-      if (directOptions.length > 0) {
-        const processedOptions = FreightCalculator.processShippingOptions(directOptions, product);
-        freightOptions = processedOptions;
+      if (shippingOptions.length === 0) {
+        console.error('❌ Nenhuma opção de frete encontrada');
+        throw new Error('Não foram encontradas opções de frete válidas para este produto e CEP');
       }
 
-      // Method 2: Fallback shipping costs (if no direct options)
-      if (freightOptions.length === 0) {
-        const fallbackCosts = await apiService.getFallbackShippingCosts(productId, zipCode, product.seller_id);
-        if (fallbackCosts.length > 0) {
-          freightOptions = FreightCalculator.processFallbackCosts(fallbackCosts);
-        }
-      }
-
-      if (freightOptions.length === 0) {
-        console.error('=== NENHUMA OPÇÃO DE FRETE ENCONTRADA ===');
-        throw new Error('Não foi possível obter custos reais de frete da API do Mercado Livre');
-      }
-
-      // Filter and select best option
-      const validOptions = FreightCalculator.filterValidOptions(freightOptions);
+      // 4. Processar opções
+      console.log('⚙️ Processando opções de frete...');
+      const processedOptions = FreightCalculator.processShippingOptions(shippingOptions, product);
+      
+      // 5. Filtrar opções válidas
+      const validOptions = FreightCalculator.filterValidOptions(processedOptions);
 
       if (validOptions.length === 0) {
-        console.error('=== TODAS AS OPÇÕES FORAM FILTRADAS ===');
         throw new Error('Todas as opções de frete retornaram valores inválidos');
       }
 
+      // 6. Selecionar melhor opção
       const selectedOption = FreightCalculator.selectBestOption(validOptions);
 
-      console.log('=== OPÇÃO FINAL SELECIONADA ===');
-      console.log('Método:', selectedOption.method);
-      console.log('Preço Cliente:', selectedOption.price);
-      console.log('Custo Vendedor:', selectedOption.sellerCost);
-      console.log('Custo Comprador:', selectedOption.buyerCost);
+      console.log('=== RESULTADO FINAL ===');
+      console.log('Opção selecionada:', selectedOption.method);
+      console.log('Preço cliente:', selectedOption.price);
+      console.log('Custo vendedor:', selectedOption.sellerCost);
+      console.log('Custo comprador:', selectedOption.buyerCost);
       console.log('Pago por:', selectedOption.paidBy);
-      console.log('Fonte:', selectedOption.source);
-      console.log('É Mercado Envios Padrão:', selectedOption.isMercadoEnviosPadrao);
-      console.log('Método de Cálculo:', selectedOption.calculationMethod);
 
       const response: FreightCalculationResponse = {
         freightOptions: validOptions,
@@ -85,7 +77,7 @@ serve(async (req) => {
         zipCode,
         productId,
         hasRealCosts: true,
-        apiSource: selectedOption.source,
+        apiSource: 'shipping_options_official',
         productData: {
           title: product.title,
           price: product.price,
@@ -111,10 +103,14 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('=== ERRO NO CÁLCULO DE FRETE ===');
-    console.error('Erro:', error.message);
+    console.error('Mensagem:', error.message);
     console.error('Stack:', error.stack);
+    
     return new Response(
-      JSON.stringify({ error: error.message || 'Erro interno do servidor' }),
+      JSON.stringify({ 
+        error: error.message || 'Erro interno do servidor',
+        details: 'Verifique os logs da função para mais detalhes'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

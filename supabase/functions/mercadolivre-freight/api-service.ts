@@ -5,91 +5,83 @@ export class MercadoLibreApiService {
   constructor(private accessToken: string) {}
 
   async getProduct(productId: string): Promise<Product> {
-    console.log('Buscando detalhes do produto...');
+    console.log('🔍 Buscando detalhes do produto:', productId);
     const productResponse = await fetch(`https://api.mercadolibre.com/items/${productId}`, {
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
+        'User-Agent': 'MercadoValor/1.0'
       },
     });
 
     if (!productResponse.ok) {
-      console.error('Erro ao buscar produto:', productResponse.status);
+      const errorText = await productResponse.text();
+      console.error('❌ Erro ao buscar produto:', productResponse.status, errorText);
       throw new Error(`Falha ao buscar produto: ${productResponse.status}`);
     }
 
     const product = await productResponse.json();
-    console.log('Produto encontrado:', product.title);
-    console.log('Seller ID:', product.seller_id);
-    console.log('Frete grátis do produto:', product.shipping?.free_shipping);
+    console.log('✅ Produto encontrado:', product.title);
+    console.log('📦 Frete grátis:', product.shipping?.free_shipping);
 
     return product;
   }
 
   async getSeller(sellerId: number): Promise<SellerData | null> {
-    console.log('Buscando informações do vendedor...');
-    const sellerResponse = await fetch(`https://api.mercadolibre.com/users/${sellerId}`, {
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
-    });
+    console.log('👤 Buscando informações do vendedor:', sellerId);
+    try {
+      const sellerResponse = await fetch(`https://api.mercadolibre.com/users/${sellerId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'User-Agent': 'MercadoValor/1.0'
+        },
+      });
 
-    if (sellerResponse.ok) {
-      const sellerData = await sellerResponse.json();
-      console.log('Seller reputation:', sellerData.seller_reputation);
-      return sellerData;
+      if (sellerResponse.ok) {
+        const sellerData = await sellerResponse.json();
+        console.log('✅ Reputação do vendedor:', sellerData.seller_reputation?.level_id);
+        return sellerData;
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro ao buscar dados do vendedor:', error);
     }
 
     return null;
   }
 
-  async getDirectShippingOptions(productId: string, zipCode: string): Promise<ShippingOption[]> {
-    console.log('=== TENTATIVA 1: Opções de frete diretas com breakdown ===');
-    const directShippingUrl = `https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}&include_dimensions=true`;
-    console.log('URL:', directShippingUrl);
+  async getShippingOptions(productId: string, zipCode: string): Promise<ShippingOption[]> {
+    console.log('🚚 Buscando opções de frete - Método Principal');
+    console.log('📍 CEP destino:', zipCode);
     
-    const directShippingResponse = await fetch(directShippingUrl, {
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
-    });
+    // Método principal: shipping_options (conforme documentação)
+    const shippingUrl = `https://api.mercadolibre.com/items/${productId}/shipping_options?zip_code=${zipCode}`;
+    console.log('🌐 URL da API:', shippingUrl);
+    
+    try {
+      const response = await fetch(shippingUrl, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'User-Agent': 'MercadoValor/1.0'
+        },
+      });
 
-    if (directShippingResponse.ok) {
-      const directShippingData = await directShippingResponse.json();
-      console.log('Resposta completa da API de frete direto:', JSON.stringify(directShippingData, null, 2));
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Resposta da API shipping_options:', JSON.stringify(data, null, 2));
 
-      if (directShippingData?.options && directShippingData.options.length > 0) {
-        console.log('Processando opções de frete diretas...');
-        return directShippingData.options;
+        if (data?.options && Array.isArray(data.options) && data.options.length > 0) {
+          console.log(`📦 ${data.options.length} opções encontradas`);
+          return data.options;
+        }
+      } else {
+        const errorText = await response.text();
+        console.warn('⚠️ Erro na API shipping_options:', response.status, errorText);
       }
-    } else {
-      console.error('Falha na API de frete direto:', directShippingResponse.status, await directShippingResponse.text());
+    } catch (error) {
+      console.warn('⚠️ Erro ao chamar shipping_options:', error);
     }
 
-    return [];
-  }
-
-  async getFallbackShippingCosts(productId: string, zipCode: string, sellerId: number): Promise<any[]> {
-    console.log('=== TENTATIVA 2: API de custos de frete com contexto do vendedor ===');
-    const costsUrl = `https://api.mercadolibre.com/sites/MLB/shipping_costs?dimensions=20x20x20,1000&zip_code_from=${sellerId}&zip_code_to=${zipCode}&item_id=${productId}`;
-    console.log('URL:', costsUrl);
-    
-    const costsResponse = await fetch(costsUrl, {
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
-    });
-
-    if (costsResponse.ok) {
-      const costsData = await costsResponse.json();
-      console.log('Resposta da API de custos:', JSON.stringify(costsData, null, 2));
-      
-      if (costsData?.costs && costsData.costs.length > 0) {
-        return costsData.costs;
-      }
-    } else {
-      console.error('Falha na API de custos:', costsResponse.status, await costsResponse.text());
-    }
-
+    // Fallback: se não conseguir opções específicas, retorna array vazio
+    console.log('❌ Nenhuma opção de frete encontrada');
     return [];
   }
 }
