@@ -13,6 +13,14 @@ interface FreightCallResult {
   error?: string;
 }
 
+interface ConsensusResult extends FreightCallResult {
+  consensus: {
+    frequency: number;
+    total: number;
+    reliability: number;
+  };
+}
+
 export const useFreightCalculation = () => {
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
 
@@ -61,7 +69,7 @@ export const useFreightCalculation = () => {
     }
   };
 
-  const findConsensusValue = (results: FreightCallResult[]) => {
+  const findConsensusValue = (results: FreightCallResult[]): ConsensusResult => {
     const successfulResults = results.filter(r => r.success);
     
     if (successfulResults.length === 0) {
@@ -70,7 +78,14 @@ export const useFreightCalculation = () => {
 
     if (successfulResults.length === 1) {
       console.log('🎯 CONSENSO: Apenas 1 valor válido encontrado');
-      return successfulResults[0];
+      return {
+        ...successfulResults[0],
+        consensus: {
+          frequency: 1,
+          total: 1,
+          reliability: 100
+        }
+      };
     }
 
     // Agrupar valores iguais
@@ -169,7 +184,7 @@ export const useFreightCalculation = () => {
       
       const finalCustomerCost = consensusResult.price;
       const finalSellerCost = consensusResult.sellerCost;
-      const reliability = consensusResult.consensus?.reliability || 100;
+      const reliability = consensusResult.consensus.reliability;
 
       // Log debug information
       FreightDebugger.logFreightCalculation({
