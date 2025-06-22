@@ -49,11 +49,10 @@ serve(async (req) => {
 
     // Definir URL baseada no tipo de teste
     if (testType === 'shipping_options_free') {
-      // Para frete grátis, vamos usar o endpoint de shipping_options sem CEP específico
-      // e analisar as opções disponíveis
-      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options`;
-      testDescription = 'Free Shipping Cost Analysis (Análise de Custo Frete Grátis)';
-      console.log(`🆓 Testando análise de frete grátis: ${apiUrl}`);
+      // Usar o endpoint oficial /free da documentação
+      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options/free`;
+      testDescription = 'Free Shipping Options (Endpoint Oficial /free)';
+      console.log(`🆓 Testando endpoint oficial /free: ${apiUrl}`);
     } else {
       // Teste padrão de shipping_options com CEP
       if (!zipCode || zipCode.trim().length === 0) {
@@ -91,48 +90,39 @@ serve(async (req) => {
     console.log('✅ Resposta recebida da API:', JSON.stringify(data, null, 2));
 
     if (testType === 'shipping_options_free') {
-      // Processar resposta para análise de frete grátis
-      console.log(`📊 Analisando opções de frete para identificar custo do frete grátis`);
+      // Processar resposta do endpoint oficial /free
+      console.log(`📊 Processando resposta do endpoint /free`);
       
       let freeShippingCost = 0;
       let currency = 'BRL';
       let hasFreeCoverage = false;
       let freeShippingDetails = null;
+      let totalOptions = 0;
       
-      if (data && data.options && Array.isArray(data.options)) {
-        // Procurar por opções que indicam frete grátis
-        const freeOptions = data.options.filter(option => {
-          return option.cost === 0 || 
-                 option.name?.toLowerCase().includes('grátis') ||
-                 option.name?.toLowerCase().includes('gratuito') ||
-                 option.shipping_method_id === 'free';
-        });
+      if (data && Array.isArray(data) && data.length > 0) {
+        totalOptions = data.length;
+        console.log(`🔍 Encontradas ${totalOptions} opções de frete grátis no endpoint /free`);
+        
+        // Pegar a primeira opção disponível
+        const firstOption = data[0];
+        hasFreeCoverage = true;
+        
+        // Extrair custos conforme estrutura da API /free
+        freeShippingCost = firstOption.cost || firstOption.list_cost || 0;
+        currency = firstOption.currency_id || 'BRL';
+        
+        freeShippingDetails = {
+          method: firstOption.name || 'Frete Grátis',
+          shipping_method_id: firstOption.shipping_method_id,
+          cost: firstOption.cost,
+          list_cost: firstOption.list_cost,
+          estimated_delivery: firstOption.estimated_delivery_time?.date,
+          coverage_areas: firstOption.coverage_areas || []
+        };
 
-        console.log(`🔍 Encontradas ${freeOptions.length} opções de frete grátis`);
-
-        if (freeOptions.length > 0) {
-          hasFreeCoverage = true;
-          const firstFreeOption = freeOptions[0];
-          
-          // O custo do frete grátis pode estar em list_cost, base_cost ou seller_cost
-          freeShippingCost = firstFreeOption.list_cost || 
-                           firstFreeOption.base_cost || 
-                           firstFreeOption.seller_cost || 0;
-          
-          currency = firstFreeOption.currency_id || 'BRL';
-          
-          freeShippingDetails = {
-            method: firstFreeOption.name,
-            shipping_method_id: firstFreeOption.shipping_method_id,
-            cost_to_customer: firstFreeOption.cost,
-            real_cost: freeShippingCost,
-            estimated_delivery: firstFreeOption.estimated_delivery_time?.date
-          };
-
-          console.log(`💰 Custo real do frete grátis: ${currency} ${freeShippingCost}`);
-        } else {
-          console.log('📊 Nenhuma opção de frete grátis encontrada');
-        }
+        console.log(`💰 Custo do frete grátis (endpoint /free): ${currency} ${freeShippingCost}`);
+      } else {
+        console.log('📊 Nenhuma opção de frete grátis encontrada no endpoint /free');
       }
       
       processedResult = {
@@ -142,7 +132,8 @@ serve(async (req) => {
           freeShippingCost: freeShippingCost,
           currency: currency,
           hasFreeCoverage: hasFreeCoverage,
-          totalOptions: data.options?.length || 0
+          totalOptions: totalOptions,
+          endpoint: '/free'
         }
       };
       
