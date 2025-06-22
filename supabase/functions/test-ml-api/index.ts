@@ -48,8 +48,9 @@ serve(async (req) => {
 
     // Definir URL baseada no tipo de teste
     if (testType === 'shipping_options_free') {
-      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options/free`;
-      testDescription = 'Shipping Options Free (Frete Grátis)';
+      // Corrigido: endpoint correto é /free, não /shipping_options/free
+      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/free`;
+      testDescription = 'Free Shipping Cost (Custo do Frete Grátis)';
       console.log(`🆓 Testando endpoint de frete grátis`);
     } else {
       // Teste padrão de shipping_options com CEP
@@ -92,24 +93,18 @@ serve(async (req) => {
       // Processar resposta do endpoint free
       console.log(`📊 Dados de frete grátis recebidos`);
       
+      // Estrutura esperada do endpoint /free é diferente
       processedResult = {
-        hasFreight: !!data.coverage,
-        coverage: data.coverage ? {
-          allCountry: data.coverage.all_country ? {
-            listCost: data.coverage.all_country.list_cost,
-            mode: data.coverage.all_country.mode
-          } : null,
-          regions: data.coverage.regions ? data.coverage.regions.length : 0
-        } : null,
+        hasFreeShipping: !!data,
+        freeShippingData: data,
         summary: {
-          hasAllCountryCoverage: !!(data.coverage?.all_country),
-          freeShippingCost: data.coverage?.all_country?.list_cost || 0,
-          shippingMode: data.coverage?.all_country?.mode || 'N/A',
-          regionsCount: data.coverage?.regions?.length || 0
+          freeShippingCost: data?.list_cost || 0,
+          currency: data?.currency_id || 'BRL',
+          hasFreeCoverage: !!data
         }
       };
       
-      console.log(`💰 Custo do frete grátis: R$ ${processedResult.summary.freeShippingCost}`);
+      console.log(`💰 Custo do frete grátis: ${data?.currency_id} ${data?.list_cost || 0}`);
       
     } else {
       // Processar resposta padrão de shipping_options

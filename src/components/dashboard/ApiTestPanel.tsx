@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,7 +115,7 @@ export const ApiTestPanel = () => {
   const getTestDescription = () => {
     switch (testType) {
       case 'shipping_options_free':
-        return 'Consulta o valor do frete grátis pago pelo vendedor';
+        return 'Consulta o custo do frete grátis do produto (endpoint /free)';
       case 'shipping_options':
         return 'Consulta opções de frete com CEP de destino';
       default:
@@ -215,10 +214,8 @@ export const ApiTestPanel = () => {
                 
                 {result.testType === 'shipping_options_free' ? (
                   <div className="space-y-1">
-                    <p>💰 Custo do frete grátis: R$ {result.summary?.freeShippingCost || 0}</p>
-                    <p>🚚 Modo de envio: {result.summary?.shippingMode}</p>
-                    <p>🌍 Cobertura nacional: {result.summary?.hasAllCountryCoverage ? 'Sim' : 'Não'}</p>
-                    <p>📍 Regiões cobertas: {result.summary?.regionsCount || 0}</p>
+                    <p>💰 Custo do frete grátis: {result.summary?.currency || 'BRL'} {result.summary?.freeShippingCost || 0}</p>
+                    <p>🎯 Tem cobertura frete grátis: {result.summary?.hasFreeCoverage ? 'Sim' : 'Não'}</p>
                   </div>
                 ) : (
                   <div className="space-y-1">
