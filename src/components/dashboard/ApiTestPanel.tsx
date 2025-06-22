@@ -16,6 +16,8 @@ export const ApiTestPanel = () => {
   const [testType, setTestType] = useState('shipping_options');
   const [result, setResult] = useState<any>(null);
 
+  console.log('🔍 Current testType:', testType);
+
   const testApi = async () => {
     // Previne execução dupla
     if (loading) {
@@ -115,10 +117,19 @@ export const ApiTestPanel = () => {
     switch (testType) {
       case 'shipping_options_free':
         return 'Consulta o valor do frete grátis pago pelo vendedor';
-      default:
+      case 'shipping_options':
         return 'Consulta opções de frete com CEP de destino';
+      default:
+        return 'Teste não identificado';
     }
   };
+
+  const testOptions = [
+    { value: 'shipping_options', label: 'Opções de Frete (com CEP)' },
+    { value: 'shipping_options_free', label: 'Frete Grátis (/free)' }
+  ];
+
+  console.log('📋 Opções disponíveis:', testOptions);
 
   return (
     <Card className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
@@ -135,11 +146,14 @@ export const ApiTestPanel = () => {
               <Label htmlFor="testType" className="text-white">Tipo de Teste</Label>
               <Select value={testType} onValueChange={setTestType} disabled={loading}>
                 <SelectTrigger className="bg-white/20 text-white border-white/30">
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione o tipo de teste" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="shipping_options">Opções de Frete (com CEP)</SelectItem>
-                  <SelectItem value="shipping_options_free">Frete Grátis (/free)</SelectItem>
+                <SelectContent className="bg-white text-black">
+                  {testOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-white/70 mt-1">{getTestDescription()}</p>
