@@ -28,10 +28,10 @@ serve(async (req) => {
       throw new Error('Body da requisição inválido');
     }
 
-    const { productId, zipCode, accessToken } = requestBody;
+    const { productId, zipCode, accessToken, testType = 'shipping_options' } = requestBody;
     
-    if (!productId || !zipCode) {
-      throw new Error('Product ID e CEP são obrigatórios');
+    if (!productId) {
+      throw new Error('Product ID é obrigatório');
     }
 
     if (!accessToken) {
@@ -39,16 +39,34 @@ serve(async (req) => {
     }
 
     const productIdToTest = productId.trim();
-    const zipCodeToTest = zipCode.trim().replace(/\D/g, '');
     
     console.log(`📦 Product ID: ${productIdToTest}`);
-    console.log(`📍 CEP: ${zipCodeToTest}`);
+    console.log(`🧪 Tipo de teste: ${testType}`);
 
-    // Chamada única à API de shipping options
-    const shippingUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options?zip_code=${zipCodeToTest}&include_dimensions=true`;
-    console.log(`🌐 Fazendo chamada para: ${shippingUrl}`);
+    let apiUrl = '';
+    let testDescription = '';
+
+    // Definir URL baseada no tipo de teste
+    if (testType === 'shipping_options_free') {
+      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options/free`;
+      testDescription = 'Shipping Options Free (Frete Grátis)';
+      console.log(`🆓 Testando endpoint de frete grátis`);
+    } else {
+      // Teste padrão de shipping_options com CEP
+      if (!zipCode || zipCode.trim().length === 0) {
+        throw new Error('CEP é obrigatório para este tipo de teste');
+      }
+      
+      const zipCodeToTest = zipCode.trim().replace(/\D/g, '');
+      console.log(`📍 CEP: ${zipCodeToTest}`);
+      
+      apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/shipping_options?zip_code=${zipCodeToTest}&include_dimensions=true`;
+      testDescription = 'Shipping Options com CEP';
+    }
+
+    console.log(`🌐 Fazendo chamada para: ${apiUrl}`);
     
-    const response = await fetch(shippingUrl, {
+    const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -67,44 +85,74 @@ serve(async (req) => {
 
     const data = await response.json();
     console.log('✅ Resposta recebida da API');
-    console.log(`📊 Total de opções encontradas: ${data.options?.length || 0}`);
 
-    // Processar e analisar as opções
-    const processedOptions = data.options?.map((option: any, index: number) => {
-      const hasDiscount = option.discount?.type === 'loyal';
-      const discountRate = option.discount?.rate || 0;
-      const promotedAmount = option.discount?.promoted_amount || 0;
+    let processedResult = {};
+
+    if (testType === 'shipping_options_free') {
+      // Processar resposta do endpoint free
+      console.log(`📊 Dados de frete grátis recebidos`);
       
-      return {
-        index: index + 1,
-        name: option.name,
-        shippingMethodId: option.shipping_method_id,
-        cost: option.cost,
-        baseCost: option.base_cost,
-        listCost: option.list_cost,
-        sellerCost: option.seller_cost,
-        hasLoyalDiscount: hasDiscount,
-        discountRate: discountRate,
-        promotedAmount: promotedAmount,
-        estimatedDelivery: option.estimated_delivery_time?.date
+      processedResult = {
+        hasFreight: !!data.coverage,
+        coverage: data.coverage ? {
+          allCountry: data.coverage.all_country ? {
+            listCost: data.coverage.all_country.list_cost,
+            mode: data.coverage.all_country.mode
+          } : null,
+          regions: data.coverage.regions ? data.coverage.regions.length : 0
+        } : null,
+        summary: {
+          hasAllCountryCoverage: !!(data.coverage?.all_country),
+          freeShippingCost: data.coverage?.all_country?.list_cost || 0,
+          shippingMode: data.coverage?.all_country?.mode || 'N/A',
+          regionsCount: data.coverage?.regions?.length || 0
+        }
       };
-    }) || [];
+      
+      console.log(`💰 Custo do frete grátis: R$ ${processedResult.summary.freeShippingCost}`);
+      
+    } else {
+      // Processar resposta padrão de shipping_options
+      const processedOptions = data.options?.map((option: any, index: number) => {
+        const hasDiscount = option.discount?.type === 'loyal';
+        const discountRate = option.discount?.rate || 0;
+        const promotedAmount = option.discount?.promoted_amount || 0;
+        
+        return {
+          index: index + 1,
+          name: option.name,
+          shippingMethodId: option.shipping_method_id,
+          cost: option.cost,
+          baseCost: option.base_cost,
+          listCost: option.list_cost,
+          sellerCost: option.seller_cost,
+          hasLoyalDiscount: hasDiscount,
+          discountRate: discountRate,
+          promotedAmount: promotedAmount,
+          estimatedDelivery: option.estimated_delivery_time?.date
+        };
+      }) || [];
 
-    const summary = {
-      totalOptions: data.options?.length || 0,
-      hasLoyalDiscount: processedOptions.some((opt: any) => opt.hasLoyalDiscount),
-      optionsWithBaseCost: processedOptions.filter((opt: any) => opt.baseCost > 0).length,
-      freeShippingOptions: processedOptions.filter((opt: any) => opt.cost === 0).length
-    };
-
-    console.log(`📊 Resumo: ${summary.totalOptions} opções, ${summary.freeShippingOptions} gratuitas`);
+      processedResult = {
+        summary: {
+          totalOptions: data.options?.length || 0,
+          hasLoyalDiscount: processedOptions.some((opt: any) => opt.hasLoyalDiscount),
+          optionsWithBaseCost: processedOptions.filter((opt: any) => opt.baseCost > 0).length,
+          freeShippingOptions: processedOptions.filter((opt: any) => opt.cost === 0).length
+        },
+        processedOptions
+      };
+      
+      console.log(`📊 Resumo: ${processedResult.summary.totalOptions} opções, ${processedResult.summary.freeShippingOptions} gratuitas`);
+    }
 
     const result = {
       success: true,
+      testType,
+      testDescription,
       productId: productIdToTest,
-      zipCode: zipCodeToTest,
-      summary,
-      processedOptions,
+      zipCode: testType === 'shipping_options' ? zipCode.trim() : null,
+      ...processedResult,
       rawApiResponse: data
     };
 

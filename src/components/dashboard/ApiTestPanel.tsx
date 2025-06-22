@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { TestTube, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +13,7 @@ export const ApiTestPanel = () => {
   const [loading, setLoading] = useState(false);
   const [productId, setProductId] = useState('690488868');
   const [zipCode, setZipCode] = useState('01310-100');
+  const [testType, setTestType] = useState('shipping_options');
   const [result, setResult] = useState<any>(null);
 
   const testApi = async () => {
@@ -32,19 +34,29 @@ export const ApiTestPanel = () => {
 
       console.log('🧪 Iniciando teste da API...');
       console.log('Product ID:', productId);
-      console.log('CEP:', zipCode);
+      console.log('Tipo de teste:', testType);
+      if (testType === 'shipping_options') {
+        console.log('CEP:', zipCode);
+      }
 
       // Usando timeout para evitar chamadas pendentes
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos
 
       try {
+        const requestBody: any = {
+          productId: productId.trim(),
+          accessToken,
+          testType
+        };
+
+        // Só adiciona CEP se for o teste padrão
+        if (testType === 'shipping_options') {
+          requestBody.zipCode = zipCode.trim();
+        }
+
         const { data, error } = await supabase.functions.invoke('test-ml-api', {
-          body: {
-            productId: productId.trim(),
-            zipCode: zipCode.trim(),
-            accessToken
-          }
+          body: requestBody
         });
 
         clearTimeout(timeoutId);
@@ -67,9 +79,16 @@ export const ApiTestPanel = () => {
         console.log('✅ Teste concluído com sucesso');
         setResult(data);
 
+        let description = '';
+        if (testType === 'shipping_options_free') {
+          description = `Frete grátis: R$ ${data.summary?.freeShippingCost || 0}`;
+        } else {
+          description = `${data.summary?.totalOptions || 0} opções de frete encontradas`;
+        }
+
         toast({
           title: "✅ Teste concluído!",
-          description: `${data.summary?.totalOptions || 0} opções de frete encontradas`,
+          description: description,
         });
 
       } catch (fetchError: any) {
@@ -92,6 +111,15 @@ export const ApiTestPanel = () => {
     }
   };
 
+  const getTestDescription = () => {
+    switch (testType) {
+      case 'shipping_options_free':
+        return 'Consulta o valor do frete grátis pago pelo vendedor';
+      default:
+        return 'Consulta opções de frete com CEP de destino';
+    }
+  };
+
   return (
     <Card className="bg-gradient-to-r from-green-600 to-blue-600 text-white">
       <CardHeader>
@@ -102,6 +130,22 @@ export const ApiTestPanel = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <Label htmlFor="testType" className="text-white">Tipo de Teste</Label>
+              <Select value={testType} onValueChange={setTestType} disabled={loading}>
+                <SelectTrigger className="bg-white/20 text-white border-white/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="shipping_options">Opções de Frete (com CEP)</SelectItem>
+                  <SelectItem value="shipping_options_free">Frete Grátis (/free)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-white/70 mt-1">{getTestDescription()}</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="productId" className="text-white">Product ID</Label>
@@ -114,22 +158,24 @@ export const ApiTestPanel = () => {
                 disabled={loading}
               />
             </div>
-            <div>
-              <Label htmlFor="zipCode" className="text-white">CEP</Label>
-              <Input
-                id="zipCode"
-                value={zipCode}
-                onChange={(e) => setZipCode(e.target.value)}
-                className="bg-white/20 text-white placeholder:text-white/60 border-white/30"
-                placeholder="01310-100"
-                disabled={loading}
-              />
-            </div>
+            {testType === 'shipping_options' && (
+              <div>
+                <Label htmlFor="zipCode" className="text-white">CEP</Label>
+                <Input
+                  id="zipCode"
+                  value={zipCode}
+                  onChange={(e) => setZipCode(e.target.value)}
+                  className="bg-white/20 text-white placeholder:text-white/60 border-white/30"
+                  placeholder="01310-100"
+                  disabled={loading}
+                />
+              </div>
+            )}
           </div>
 
           <Button
             onClick={testApi}
-            disabled={loading || !productId.trim() || !zipCode.trim()}
+            disabled={loading || !productId.trim() || (testType === 'shipping_options' && !zipCode.trim())}
             className="w-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm disabled:opacity-50"
           >
             {loading ? (
@@ -149,12 +195,25 @@ export const ApiTestPanel = () => {
             <div className="mt-4 p-4 bg-black/20 rounded-lg">
               <h3 className="font-semibold mb-2">✅ Resultado do Teste:</h3>
               <div className="text-sm space-y-1">
+                <p>🧪 Tipo: {result.testDescription}</p>
                 <p>📦 Produto: {result.productId}</p>
-                <p>📍 CEP: {result.zipCode}</p>
-                <p>🚚 Total de opções: {result.summary?.totalOptions || 0}</p>
-                <p>🆓 Opções gratuitas: {result.summary?.freeShippingOptions || 0}</p>
-                <p>💰 Com desconto loyalty: {result.summary?.hasLoyalDiscount ? 'Sim' : 'Não'}</p>
-                <p>📊 Com base_cost: {result.summary?.optionsWithBaseCost || 0}</p>
+                {result.zipCode && <p>📍 CEP: {result.zipCode}</p>}
+                
+                {result.testType === 'shipping_options_free' ? (
+                  <div className="space-y-1">
+                    <p>💰 Custo do frete grátis: R$ {result.summary?.freeShippingCost || 0}</p>
+                    <p>🚚 Modo de envio: {result.summary?.shippingMode}</p>
+                    <p>🌍 Cobertura nacional: {result.summary?.hasAllCountryCoverage ? 'Sim' : 'Não'}</p>
+                    <p>📍 Regiões cobertas: {result.summary?.regionsCount || 0}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <p>🚚 Total de opções: {result.summary?.totalOptions || 0}</p>
+                    <p>🆓 Opções gratuitas: {result.summary?.freeShippingOptions || 0}</p>
+                    <p>💰 Com desconto loyalty: {result.summary?.hasLoyalDiscount ? 'Sim' : 'Não'}</p>
+                    <p>📊 Com base_cost: {result.summary?.optionsWithBaseCost || 0}</p>
+                  </div>
+                )}
               </div>
               
               {result.processedOptions && result.processedOptions.length > 0 && (
