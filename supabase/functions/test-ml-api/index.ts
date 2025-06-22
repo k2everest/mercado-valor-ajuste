@@ -48,7 +48,6 @@ serve(async (req) => {
 
     // Definir URL baseada no tipo de teste
     if (testType === 'shipping_options_free') {
-      // Endpoint correto é /free
       apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/free`;
       testDescription = 'Free Shipping Cost (Custo do Frete Grátis)';
       console.log(`🆓 Testando endpoint de frete grátis: ${apiUrl}`);
@@ -94,25 +93,31 @@ serve(async (req) => {
       // Processar resposta do endpoint /free
       console.log(`📊 Processando dados de frete grátis`);
       
-      // O endpoint /free pode retornar diferentes estruturas dependendo do produto
       let freeShippingCost = 0;
       let currency = 'BRL';
       let hasFreeCoverage = false;
       
-      if (data) {
-        // Verificar se há dados de custo
-        if (data.list_cost !== undefined) {
+      // Diferentes estruturas possíveis de resposta
+      if (data !== null && data !== undefined) {
+        if (typeof data === 'number') {
+          // Retorna apenas o valor numérico
+          freeShippingCost = data;
+          hasFreeCoverage = true;
+          console.log('📊 Estrutura: valor numérico direto');
+        } else if (data.list_cost !== undefined) {
+          // Estrutura com list_cost direto
           freeShippingCost = data.list_cost;
           currency = data.currency_id || 'BRL';
           hasFreeCoverage = true;
-        } else if (data.coverage && data.coverage.all_country) {
-          // Estrutura alternativa
-          freeShippingCost = data.coverage.all_country.list_cost || 0;
+          console.log('📊 Estrutura: objeto com list_cost');
+        } else if (data.coverage && data.coverage.all_country && data.coverage.all_country.list_cost !== undefined) {
+          // Estrutura com coverage
+          freeShippingCost = data.coverage.all_country.list_cost;
+          currency = data.coverage.all_country.currency_id || 'BRL';
           hasFreeCoverage = true;
-        } else if (typeof data === 'number') {
-          // Às vezes retorna apenas o valor
-          freeShippingCost = data;
-          hasFreeCoverage = true;
+          console.log('📊 Estrutura: objeto com coverage');
+        } else {
+          console.log('📊 Estrutura desconhecida ou sem dados de frete grátis');
         }
       }
       
@@ -172,6 +177,8 @@ serve(async (req) => {
       ...processedResult,
       rawApiResponse: data
     };
+
+    console.log('✅ Teste concluído com sucesso');
 
     return new Response(
       JSON.stringify(result),
