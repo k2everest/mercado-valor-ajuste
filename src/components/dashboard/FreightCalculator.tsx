@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,11 +38,141 @@ export const FreightCalculator = ({
     localStorage.setItem('freight_calculations', JSON.stringify(cache));
   };
 
+  const makeMultipleFreightCalls = async (productId: string) => {
+    const results = [];
+    
+    try {
+      console.log('🚚 INICIANDO MÚLTIPLAS CHAMADAS PARA CONSENSO');
+      console.log('📦 Produto:', productId);
+      console.log('📍 CEP padrão:', STANDARD_ZIP_CODE);
+      
+      const accessToken = localStorage.getItem('ml_access_token');
+      if (!accessToken) {
+        throw new Error('Token de acesso não encontrado');
+      }
+
+      // Fazer 3 chamadas consecutivas
+      for (let i = 1; i <= 3; i++) {
+        console.log(`🔄 Chamada ${i}/3...`);
+        
+        try {
+          const { supabase } = await import("@/integrations/supabase/client");
+          const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
+            body: { 
+              action: 'getShippingCosts',
+              productId,
+              zipCode: STANDARD_ZIP_CODE.replace(/\D/g, ''),
+              accessToken
+            }
+          });
+
+          if (error) {
+            console.error(`❌ Erro na chamada ${i}:`, error);
+            results.push({ attempt: i, success: false, error: error.message });
+            continue;
+          }
+
+          const selectedOption = data?.selectedOption;
+          if (!selectedOption) {
+            console.error(`❌ Chamada ${i}: Nenhuma opção retornada`);
+            results.push({ attempt: i, success: false, error: 'Nenhuma opção retornada' });
+            continue;
+          }
+
+          const customerCost = Number(selectedOption.price);
+          const sellerCost = Number(selectedOption.sellerCost);
+          
+          console.log(`✅ Chamada ${i}: Cliente R$ ${customerCost.toFixed(2)} | Vendedor R$ ${sellerCost.toFixed(2)}`);
+          
+          results.push({
+            attempt: i,
+            success: true,
+            customerCost,
+            sellerCost,
+            method: selectedOption.method,
+            rawData: selectedOption
+          });
+
+        } catch (error: any) {
+          console.error(`❌ Erro na chamada ${i}:`, error);
+          results.push({ attempt: i, success: false, error: error.message });
+        }
+
+        // Delay entre chamadas
+        if (i < 3) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+
+      return results;
+    } catch (error: any) {
+      console.error('💥 ERRO GERAL NAS MÚLTIPLAS CHAMADAS:', error);
+      return [];
+    }
+  };
+
+  const findConsensusValue = (results: any[]) => {
+    const successfulResults = results.filter(r => r.success);
+    
+    if (successfulResults.length === 0) {
+      throw new Error('Todas as chamadas falharam');
+    }
+
+    if (successfulResults.length === 1) {
+      console.log('🎯 CONSENSO: Apenas 1 valor válido');
+      return { ...successfulResults[0], reliability: 100 };
+    }
+
+    // Agrupar valores similares (considera diferenças de até R$ 0.50)
+    const groups: any[] = [];
+    
+    successfulResults.forEach(result => {
+      const existingGroup = groups.find(group => 
+        Math.abs(group.sellerCost - result.sellerCost) <= 0.50 &&
+        Math.abs(group.customerCost - result.customerCost) <= 0.50
+      );
+      
+      if (existingGroup) {
+        existingGroup.count++;
+        existingGroup.results.push(result);
+      } else {
+        groups.push({
+          sellerCost: result.sellerCost,
+          customerCost: result.customerCost,
+          method: result.method,
+          count: 1,
+          results: [result]
+        });
+      }
+    });
+
+    // Encontrar grupo com mais ocorrências
+    const bestGroup = groups.reduce((prev, current) => 
+      current.count > prev.count ? current : prev
+    );
+
+    const reliability = (bestGroup.count / successfulResults.length) * 100;
+    
+    console.log('🎯 ANÁLISE DE CONSENSO:');
+    console.log(`- Chamadas sucessos: ${successfulResults.length}/3`);
+    console.log(`- Grupos encontrados: ${groups.length}`);
+    console.log(`- Melhor grupo: ${bestGroup.count} ocorrências`);
+    console.log(`- Confiabilidade: ${reliability.toFixed(1)}%`);
+
+    return {
+      customerCost: bestGroup.customerCost,
+      sellerCost: bestGroup.sellerCost,
+      method: bestGroup.method,
+      reliability,
+      rawData: bestGroup.results[0].rawData
+    };
+  };
+
   const fetchFreightCosts = async (productId: string, forceRecalculate = false) => {
     const calculationCache = getFreightCache();
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     
-    // Check if we have a recent calculation and don't need to force recalculate
+    // Check cache apenas se não for recalcular forçadamente
     if (!forceRecalculate) {
       const cachedCalculation = calculationCache[productId];
       if (cachedCalculation && cachedCalculation.timestamp > fortyEightHoursAgo) {
@@ -51,7 +180,6 @@ export const FreightCalculator = ({
         
         console.log(`📋 Usando cálculo em cache para produto ${productId}`);
         
-        // Log debug info for cache usage
         FreightDebugger.logFreightCalculation({
           productId,
           value: cachedCalculation.sellerFreightCost,
@@ -80,80 +208,52 @@ export const FreightCalculator = ({
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
     try {
-      console.log('🚚 CALCULANDO CUSTO REAL DE FRETE VIA API');
-      console.log('📍 Produto ID:', productId);
-      console.log('📍 CEP padrão (remetente):', STANDARD_ZIP_CODE);
+      // Fazer múltiplas chamadas
+      const results = await makeMultipleFreightCalls(productId);
       
-      const accessToken = localStorage.getItem('ml_access_token');
-      if (!accessToken) {
-        throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
-      }
-
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
-        body: { 
-          action: 'getShippingCosts',
-          productId,
-          zipCode: STANDARD_ZIP_CODE,
-          accessToken
-        }
-      });
-
-      if (error) {
-        console.error('❌ ERRO DA FUNÇÃO SUPABASE:', error);
-        throw new Error(`Erro da API: ${error.message}`);
-      }
-
-      console.log('📦 RESPOSTA COMPLETA DA API:', JSON.stringify(data, null, 2));
+      // Encontrar consenso
+      const consensusValue = findConsensusValue(results);
       
-      const selectedOption = data?.selectedOption || data?.freightOptions?.[0];
-      
-      if (!selectedOption) {
-        console.error('❌ NENHUMA OPÇÃO VÁLIDA DE FRETE RETORNADA');
-        throw new Error('API do Mercado Livre não retornou opções de frete válidas');
-      }
+      const finalCustomerCost = consensusValue.customerCost;
+      const finalSellerCost = consensusValue.sellerCost;
+      const reliability = consensusValue.reliability;
 
-      const finalCustomerCost = Number(selectedOption.price);
-      const finalSellerCost = Number(selectedOption.sellerCost);
-
-      console.log('💰 VALORES FINAIS CALCULADOS:');
-      console.log('- Custo para cliente:', finalCustomerCost);
-      console.log('- Custo para vendedor:', finalSellerCost);
-      console.log('- Método:', selectedOption.method);
-      console.log('- Dados brutos:', selectedOption.rawData);
-
-      // Log debug info for API calculation
+      // Log debug information
       FreightDebugger.logFreightCalculation({
         productId,
         value: finalSellerCost,
         source: 'api',
         timestamp: Date.now(),
-        calculationMethod: selectedOption.method,
-        apiResponse: data,
-        rawData: selectedOption
+        calculationMethod: `${consensusValue.method} (Consenso)`,
+        apiResponse: { consensusValue, allResults: results },
+        rawData: consensusValue.rawData
       });
 
       onFreightCalculated(productId, {
         freightCost: finalCustomerCost,
         sellerFreightCost: finalSellerCost,
-        freightMethod: selectedOption.method
+        freightMethod: `${consensusValue.method} (${reliability.toFixed(0)}% confiável)`
       });
 
-      // Update cache with timestamp
+      // Update cache
       calculationCache[productId] = {
         freightCost: finalCustomerCost,
         sellerFreightCost: finalSellerCost,
-        freightMethod: selectedOption.method,
+        freightMethod: `${consensusValue.method} (${reliability.toFixed(0)}% confiável)`,
         timestamp: Date.now(),
-        zipCode: STANDARD_ZIP_CODE
+        zipCode: STANDARD_ZIP_CODE,
+        reliability: reliability,
+        consensusData: { results, consensusValue }
       };
       setFreightCache(calculationCache);
 
-      const discountInfo = selectedOption.discount ? ` (desconto: ${JSON.stringify(selectedOption.discount)})` : '';
+      const reliabilityText = reliability >= 100 ? 'Muito Alta' : 
+                             reliability >= 67 ? 'Alta' : 
+                             'Moderada';
       
       toast({
-        title: "✅ Custo calculado via API e salvo!",
-        description: `${selectedOption.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)}${discountInfo}`,
+        title: "✅ Frete calculado com múltiplas chamadas!",
+        description: `${consensusValue.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)} (Confiabilidade: ${reliabilityText})`,
       });
 
     } catch (error: any) {
@@ -212,7 +312,7 @@ export const FreightCalculator = ({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-white">
           <Calculator className="h-5 w-5" />
-          Calculadora de Frete Real
+          Calculadora de Frete Real (Sistema de Consenso)
           {changedItemsCount > 0 && (
             <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
               {changedItemsCount} alterados
@@ -223,9 +323,11 @@ export const FreightCalculator = ({
       <CardContent>
         <div className="space-y-4">
           <p className="text-blue-100">
-            Calcule o custo real do frete que você paga como vendedor
+            Calcule o custo real do frete com sistema de múltiplas chamadas para maior precisão
             <br />
-            <span className="text-sm opacity-75">CEP padrão: {STANDARD_ZIP_CODE} (valores salvos por 48h)</span>
+            <span className="text-sm opacity-75">
+              CEP padrão: {STANDARD_ZIP_CODE} | 3 chamadas por cálculo | Valores salvos por 48h
+            </span>
           </p>
           
           <div className="flex flex-wrap gap-2">
@@ -245,7 +347,7 @@ export const FreightCalculator = ({
               className="flex items-center gap-2 border-white/30 text-white hover:bg-white/10"
             >
               <RefreshCw className="h-4 w-4" />
-              Recalcular Tudo
+              Recalcular c/ Consenso
             </Button>
 
             <Button
@@ -284,8 +386,8 @@ export const FreightCalculator = ({
               </div>
               
               <p className="text-xs text-white/70">
-                Use as ferramentas acima para investigar de onde vêm os valores de frete.
-                Todos os logs aparecem no console do navegador.
+                Sistema de consenso: 3 chamadas por produto, seleção do valor mais frequente.
+                Confiabilidade calculada baseada na consistência dos resultados.
               </p>
             </div>
           )}
