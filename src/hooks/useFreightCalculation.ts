@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { FreightDebugger } from '@/utils/freightDebug';
 
 export const useFreightCalculation = () => {
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
@@ -38,7 +39,7 @@ export const useFreightCalculation = () => {
         throw new Error('Token de acesso não encontrado. Reconecte-se ao Mercado Livre.');
       }
 
-      console.log('🔄 Chamando função corrigida...');
+      console.log('🔄 Chamando função de frete com debug...');
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
         body: { 
@@ -54,7 +55,7 @@ export const useFreightCalculation = () => {
         throw new Error(`Erro da API: ${error.message}`);
       }
 
-      console.log('📦 Resposta da API corrigida:', JSON.stringify(data, null, 2));
+      console.log('📦 Resposta completa da API com debug:', JSON.stringify(data, null, 2));
       
       if (!data?.selectedOption) {
         console.error('❌ Nenhuma opção selecionada na resposta');
@@ -78,6 +79,18 @@ export const useFreightCalculation = () => {
       console.log('- Custo Vendedor:', finalSellerCost);
       console.log('- Método:', selectedOption.method);
       console.log('- Pago por:', selectedOption.paidBy);
+      console.log('- Dados brutos da API:', selectedOption.rawData);
+
+      // Log debug information
+      FreightDebugger.logFreightCalculation({
+        productId,
+        value: finalSellerCost,
+        source: 'api',
+        timestamp: Date.now(),
+        calculationMethod: selectedOption.method,
+        apiResponse: data,
+        rawData: selectedOption
+      });
 
       toast({
         title: "✅ Frete calculado com API oficial!",

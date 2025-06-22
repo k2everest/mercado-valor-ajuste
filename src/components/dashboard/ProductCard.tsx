@@ -2,8 +2,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Minus, Plus, Truck } from "lucide-react";
+import { ExternalLink, Minus, Plus, Truck, Bug, Trash2 } from "lucide-react";
 import { Product } from './types';
+import { FreightDebugger } from '@/utils/freightDebug';
+import { toast } from "@/hooks/use-toast";
 
 interface ProductCardProps {
   product: Product;
@@ -37,6 +39,46 @@ export const ProductCard = ({
       default: return status;
     }
   };
+
+  const debugProduct = () => {
+    console.log(`🔍 DEBUG PRODUTO ${product.id}:`);
+    console.log('- Título:', product.title);
+    console.log('- Preço original:', product.originalPrice);
+    console.log('- Custo frete vendedor:', product.sellerFreightCost);
+    console.log('- Método frete:', product.freightMethod);
+    
+    // Inspect cache for this product
+    FreightDebugger.inspectProductCache(product.id);
+    
+    // Get debug info
+    const debugInfo = FreightDebugger.getProductDebugInfo(product.id);
+    if (debugInfo) {
+      console.log('- Debug info:', debugInfo);
+    }
+    
+    toast({
+      title: "🔍 Debug realizado",
+      description: `Informações do produto ${product.id} no console`,
+    });
+  };
+
+  const clearProductCache = () => {
+    FreightDebugger.clearProductCache(product.id);
+    toast({
+      title: "🧹 Cache limpo",
+      description: `Cache do produto ${product.id} removido`,
+    });
+  };
+
+  const forceRecalculate = () => {
+    clearProductCache();
+    onCalculateFreight(product.id);
+  };
+
+  // Get debug info to show source
+  const debugInfo = FreightDebugger.getProductDebugInfo(product.id);
+  const valueSource = debugInfo?.source || 'unknown';
+  const cacheAge = debugInfo?.cacheAge ? Math.round(debugInfo.cacheAge / (1000 * 60 * 60)) : null;
 
   return (
     <Card className="hover:shadow-lg transition-all duration-300 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50">
@@ -88,6 +130,11 @@ export const ProductCard = ({
                       {product.freeShipping && (
                         <span className="text-xs text-orange-600 ml-1">(Vendedor paga)</span>
                       )}
+                      {valueSource !== 'unknown' && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          [{valueSource === 'cache' ? `cache ${cacheAge}h` : valueSource}]
+                        </span>
+                      )}
                     </div>
                   )}
                   {product.adjustedPrice && (
@@ -136,26 +183,50 @@ export const ProductCard = ({
             </Button>
             
             {product.sellerFreightCost !== undefined && (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onAdjustPrice(product.id, 'subtract')}
-                  className="flex items-center gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-                >
-                  <Minus className="h-4 w-4" />
-                  Subtrair Custo Real
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onAdjustPrice(product.id, 'add')}
-                  className="flex items-center gap-1 border-green-200 text-green-700 hover:bg-green-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Somar Custo Real
-                </Button>
-              </div>
+              <>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onAdjustPrice(product.id, 'subtract')}
+                    className="flex items-center gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                  >
+                    <Minus className="h-4 w-4" />
+                    Subtrair Custo Real
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onAdjustPrice(product.id, 'add')}
+                    className="flex items-center gap-1 border-green-200 text-green-700 hover:bg-green-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Somar Custo Real
+                  </Button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={debugProduct}
+                    className="flex items-center gap-1 border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    <Bug className="h-4 w-4" />
+                    Debug
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={forceRecalculate}
+                    disabled={loadingFreight}
+                    className="flex items-center gap-1 border-orange-300 text-orange-600 hover:bg-orange-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Recalcular
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         </div>
