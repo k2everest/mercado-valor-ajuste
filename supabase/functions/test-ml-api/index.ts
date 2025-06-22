@@ -240,8 +240,9 @@ serve(async (req) => {
       };
     }
 
-    // 4. Buscar informações do produto
+    // 4. Buscar informações do produto primeiro para obter USER_ID
     console.log('📦 === BUSCANDO INFORMAÇÕES DO PRODUTO ===');
+    let userId = null;
     try {
       const productResponse = await fetch(`https://api.mercadolibre.com/items/${productIdToTest}`, {
         headers: {
@@ -254,6 +255,8 @@ serve(async (req) => {
         const productData = await productResponse.json();
         console.log('✅ Product Info:', productData.title);
         console.log('📦 Free Shipping declarado:', productData.shipping?.free_shipping);
+        userId = productData.seller_id;
+        console.log('👤 User ID do vendedor:', userId);
         
         results.allResults.product_info = {
           success: true,
@@ -281,13 +284,91 @@ serve(async (req) => {
       };
     }
 
-    // 5. Gerar resumo consolidado
+    // 5. NOVO: Testar endpoint de frete grátis do usuário
+    if (userId) {
+      console.log('👤 === TESTANDO ENDPOINT USER FREE SHIPPING ===');
+      
+      // Buscar informações básicas do produto para os parâmetros
+      const productInfo = results.allResults.product_info;
+      
+      // Construir URL com parâmetros básicos
+      const userFreeUrl = `https://api.mercadolibre.com/users/${userId}/shipping_options/free?item_price=${productInfo?.price || 100}&condition=${productInfo?.condition || 'new'}&verbose=true`;
+      
+      try {
+        const userFreeResponse = await fetch(userFreeUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'MercadoValor/1.0'
+          },
+        });
+
+        if (userFreeResponse.ok) {
+          const userFreeData = await userFreeResponse.json();
+          console.log('✅ User Free Shipping Response:', JSON.stringify(userFreeData, null, 2));
+          
+          // Processar opções de frete grátis do usuário
+          let userFreeOptions = [];
+          if (userFreeData.options && Array.isArray(userFreeData.options)) {
+            userFreeOptions = userFreeData.options.map((option: any, index: number) => ({
+              index: index + 1,
+              name: option.name || 'N/A',
+              shippingMethodId: option.shipping_method_id,
+              cost: option.cost || 0,
+              listCost: option.list_cost || 0,
+              currencyId: option.currency_id || 'BRL',
+              logisticType: option.logistic_type,
+              estimatedDelivery: option.estimated_delivery_time?.date,
+              coverage: option.coverage
+            }));
+          }
+
+          results.allResults.user_free_shipping = {
+            success: true,
+            endpoint: `/users/${userId}/shipping_options/free`,
+            userId: userId,
+            totalOptions: userFreeOptions.length,
+            options: userFreeOptions,
+            rawResponse: userFreeData
+          };
+
+        } else {
+          const userFreeErrorText = await userFreeResponse.text();
+          console.log(`⚠️ User Free Shipping Error: ${userFreeResponse.status} - ${userFreeErrorText}`);
+          results.allResults.user_free_shipping = {
+            success: false,
+            error: `${userFreeResponse.status} - ${userFreeErrorText}`,
+            endpoint: `/users/${userId}/shipping_options/free`,
+            userId: userId
+          };
+        }
+      } catch (error: any) {
+        console.error('❌ Erro no user free shipping:', error);
+        results.allResults.user_free_shipping = {
+          success: false,
+          error: error.message,
+          endpoint: `/users/${userId}/shipping_options/free`,
+          userId: userId
+        };
+      }
+    } else {
+      console.log('⚠️ Não foi possível obter USER_ID, pulando teste do endpoint /users/.../shipping_options/free');
+      results.allResults.user_free_shipping = {
+        success: false,
+        error: 'USER_ID não disponível',
+        endpoint: '/users/{USER_ID}/shipping_options/free'
+      };
+    }
+
+    // 6. Gerar resumo consolidado
     console.log('📊 === GERANDO RESUMO CONSOLIDADO ===');
     const summary = {
       totalEndpointsTested: Object.keys(results.allResults).length,
       successfulEndpoints: Object.values(results.allResults).filter((r: any) => r.success).length,
       hasProductInfo: results.allResults.product_info?.success || false,
       hasFreeShippingEndpoint: results.allResults.free_shipping?.success || false,
+      hasUserFreeShippingEndpoint: results.allResults.user_free_shipping?.success || false,
       hasShippingOptions: results.allResults.shipping_options?.success || false,
       hasBasicShipping: results.allResults.basic_shipping?.success || false,
       
@@ -295,8 +376,10 @@ serve(async (req) => {
       freeShippingAnalysis: {
         productDeclaresFreeShipping: results.allResults.product_info?.freeShippingDeclared || false,
         freeEndpointAvailable: results.allResults.free_shipping?.success || false,
+        userFreeEndpointAvailable: results.allResults.user_free_shipping?.success || false,
         nationalCoverageCost: results.allResults.free_shipping?.freeShippingInfo?.listCost || null,
-        areasWithFreeCoverage: results.allResults.free_shipping?.totalAreas || 0
+        areasWithFreeCoverage: results.allResults.free_shipping?.totalAreas || 0,
+        userFreeOptions: results.allResults.user_free_shipping?.totalOptions || 0
       }
     };
 
@@ -305,7 +388,8 @@ serve(async (req) => {
     console.log('✅ === TESTE COMPLETO FINALIZADO ===');
     console.log(`📊 Endpoints testados: ${summary.totalEndpointsTested}`);
     console.log(`✅ Sucessos: ${summary.successfulEndpoints}`);
-    console.log(`🆓 Frete grátis disponível: ${summary.freeShippingAnalysis.freeEndpointAvailable ? 'Sim' : 'Não'}`);
+    console.log(`🆓 Frete grátis (item) disponível: ${summary.freeShippingAnalysis.freeEndpointAvailable ? 'Sim' : 'Não'}`);
+    console.log(`👤 Frete grátis (usuário) disponível: ${summary.freeShippingAnalysis.userFreeEndpointAvailable ? 'Sim' : 'Não'}`);
     if (summary.freeShippingAnalysis.nationalCoverageCost) {
       console.log(`💰 Custo nacional vendedor: R$ ${summary.freeShippingAnalysis.nationalCoverageCost}`);
     }

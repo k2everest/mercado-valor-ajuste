@@ -121,6 +121,7 @@ export const ApiTestPanel = () => {
           <div className="mt-3 space-y-2 text-sm">
             <p><strong>Endpoint:</strong> {data.endpoint}</p>
             {data.zipCode && <p><strong>CEP:</strong> {data.zipCode}</p>}
+            {data.userId && <p><strong>User ID:</strong> {data.userId}</p>}
             
             {data.error && (
               <div className="bg-red-50 p-2 rounded text-red-700">
@@ -138,6 +139,7 @@ export const ApiTestPanel = () => {
                       <p>💰 Cliente: R$ {option.cost} | Vendedor: R$ {option.sellerCost || option.listCost || 'N/A'}</p>
                       {option.hasLoyalDiscount && <p>🎯 Desconto Loyal</p>}
                       {option.isFreeForCustomer && <p>🆓 Grátis para cliente</p>}
+                      {option.logisticType && <p>📦 Tipo: {option.logisticType}</p>}
                     </div>
                   ))}
                 </div>
@@ -237,8 +239,12 @@ export const ApiTestPanel = () => {
                   <p>📦 Produto: {result.allResults?.product_info?.title || 'N/A'}</p>
                   <p>🆓 Declara frete grátis: {result.summary?.freeShippingAnalysis?.productDeclaresFreeShipping ? 'Sim' : 'Não'}</p>
                   <p>💰 Endpoint /free disponível: {result.summary?.freeShippingAnalysis?.freeEndpointAvailable ? 'Sim' : 'Não'}</p>
+                  <p>👤 Endpoint /users/.../free disponível: {result.summary?.freeShippingAnalysis?.userFreeEndpointAvailable ? 'Sim' : 'Não'}</p>
                   {result.summary?.freeShippingAnalysis?.nationalCoverageCost && (
                     <p>💰 Custo nacional vendedor: R$ {result.summary.freeShippingAnalysis.nationalCoverageCost}</p>
+                  )}
+                  {result.summary?.freeShippingAnalysis?.userFreeOptions && (
+                    <p>🎯 Opções frete grátis usuário: {result.summary.freeShippingAnalysis.userFreeOptions}</p>
                   )}
                 </div>
               </div>
@@ -254,6 +260,11 @@ export const ApiTestPanel = () => {
                   'free_shipping', 
                   result.allResults.free_shipping, 
                   '🆓 Frete Grátis (/free)'
+                )}
+                {result.allResults?.user_free_shipping && renderEndpointResult(
+                  'user_free_shipping', 
+                  result.allResults.user_free_shipping, 
+                  '👤 Frete Grátis do Usuário'
                 )}
                 {result.allResults?.shipping_options && renderEndpointResult(
                   'shipping_options', 
