@@ -48,10 +48,10 @@ serve(async (req) => {
 
     // Definir URL baseada no tipo de teste
     if (testType === 'shipping_options_free') {
-      // Corrigido: endpoint correto é /free, não /shipping_options/free
+      // Endpoint correto é /free
       apiUrl = `https://api.mercadolibre.com/items/${productIdToTest}/free`;
       testDescription = 'Free Shipping Cost (Custo do Frete Grátis)';
-      console.log(`🆓 Testando endpoint de frete grátis`);
+      console.log(`🆓 Testando endpoint de frete grátis: ${apiUrl}`);
     } else {
       // Teste padrão de shipping_options com CEP
       if (!zipCode || zipCode.trim().length === 0) {
@@ -77,6 +77,7 @@ serve(async (req) => {
     });
 
     console.log(`📡 Response status: ${response.status}`);
+    console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -85,26 +86,47 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log('✅ Resposta recebida da API');
+    console.log('✅ Resposta recebida da API:', JSON.stringify(data, null, 2));
 
     let processedResult = {};
 
     if (testType === 'shipping_options_free') {
-      // Processar resposta do endpoint free
-      console.log(`📊 Dados de frete grátis recebidos`);
+      // Processar resposta do endpoint /free
+      console.log(`📊 Processando dados de frete grátis`);
       
-      // Estrutura esperada do endpoint /free é diferente
+      // O endpoint /free pode retornar diferentes estruturas dependendo do produto
+      let freeShippingCost = 0;
+      let currency = 'BRL';
+      let hasFreeCoverage = false;
+      
+      if (data) {
+        // Verificar se há dados de custo
+        if (data.list_cost !== undefined) {
+          freeShippingCost = data.list_cost;
+          currency = data.currency_id || 'BRL';
+          hasFreeCoverage = true;
+        } else if (data.coverage && data.coverage.all_country) {
+          // Estrutura alternativa
+          freeShippingCost = data.coverage.all_country.list_cost || 0;
+          hasFreeCoverage = true;
+        } else if (typeof data === 'number') {
+          // Às vezes retorna apenas o valor
+          freeShippingCost = data;
+          hasFreeCoverage = true;
+        }
+      }
+      
       processedResult = {
-        hasFreeShipping: !!data,
+        hasFreeShipping: hasFreeCoverage,
         freeShippingData: data,
         summary: {
-          freeShippingCost: data?.list_cost || 0,
-          currency: data?.currency_id || 'BRL',
-          hasFreeCoverage: !!data
+          freeShippingCost: freeShippingCost,
+          currency: currency,
+          hasFreeCoverage: hasFreeCoverage
         }
       };
       
-      console.log(`💰 Custo do frete grátis: ${data?.currency_id} ${data?.list_cost || 0}`);
+      console.log(`💰 Custo do frete grátis: ${currency} ${freeShippingCost}`);
       
     } else {
       // Processar resposta padrão de shipping_options
