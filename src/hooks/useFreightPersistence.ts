@@ -36,7 +36,11 @@ export const useFreightPersistence = () => {
 
       if (data) {
         setLastZipCode(data.zip_code || '');
-        return data.calculations as Product[] || [];
+        // Converter JSON para Product[] com verificação de tipos
+        const calculations = data.calculations as any[];
+        return Array.isArray(calculations) ? calculations.filter(item => 
+          item && typeof item === 'object' && item.id && item.title
+        ) as Product[] : [];
       }
 
       return [];
@@ -58,12 +62,30 @@ export const useFreightPersistence = () => {
     );
 
     try {
+      // Converter Products para JSON serializável
+      const calculationsData = calculatedProducts.map(p => ({
+        id: p.id,
+        title: p.title,
+        price: p.price || p.originalPrice,
+        originalPrice: p.originalPrice,
+        status: p.status,
+        freeShipping: p.freeShipping,
+        adjustedPrice: p.adjustedPrice,
+        permalink: p.permalink,
+        thumbnail: p.thumbnail,
+        availableQuantity: p.availableQuantity,
+        soldQuantity: p.soldQuantity,
+        freightCost: p.freightCost,
+        sellerFreightCost: p.sellerFreightCost,
+        freightMethod: p.freightMethod
+      }));
+
       const { error } = await supabase
         .from('user_last_calculations')
         .upsert({
           user_id: user.id,
           zip_code: zipCode,
-          calculations: calculatedProducts,
+          calculations: calculationsData as any,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id'

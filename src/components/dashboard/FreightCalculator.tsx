@@ -172,7 +172,7 @@ export const FreightCalculator = ({
                         <div className="flex items-center gap-4 mb-3">
                           <Badge variant="outline">
                             <DollarSign className="h-3 w-3 mr-1" />
-                            R$ {product.price?.toFixed(2)}
+                            R$ {(product.price || product.originalPrice)?.toFixed(2)}
                           </Badge>
                           <Badge variant="secondary">
                             ID: {product.id}

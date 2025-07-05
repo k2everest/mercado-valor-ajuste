@@ -2,6 +2,7 @@
 export interface Product {
   id: string;
   title: string;
+  price: number; // Adicionando propriedade price que estava faltando
   originalPrice: number;
   status: 'active' | 'paused' | 'closed';
   freeShipping: boolean;
