@@ -1,9 +1,11 @@
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { useFreightPersistence } from "@/hooks/useFreightPersistence";
 import { MercadoLibreConnection } from "./MercadoLibreConnection";
 import { ProductsList } from "./ProductsList";
 import { FreightCalculator } from "./FreightCalculator";
@@ -11,24 +13,81 @@ import { SettingsPanel } from "./SettingsPanel";
 import { ApiTestPanel } from "./ApiTestPanel";
 import { Calculator, Package, Settings, TestTube, ShoppingCart } from "lucide-react";
 import { Product, PaginationInfo } from './types';
+import { toast } from "@/hooks/use-toast";
 
 export const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [hasConnection, setHasConnection] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | undefined>();
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
+  const [currentZipCode, setCurrentZipCode] = useState('');
+  const { 
+    lastZipCode, 
+    isLoading: isLoadingCalculations, 
+    loadLastCalculations, 
+    saveCalculations 
+  } = useFreightPersistence();
 
+  // Verificar conexão ML e carregar dados persistidos
   useEffect(() => {
     const token = localStorage.getItem('ml_access_token');
-    setHasConnection(!!token);
-  }, []);
+    const hasMLConnection = !!token;
+    
+    console.log('🔍 Verificando conexão ML:', { hasMLConnection });
+    setHasConnection(hasMLConnection);
+    
+    // Se não tem conexão com ML, redirecionar para home
+    if (!hasMLConnection) {
+      console.log('❌ Sem conexão ML, redirecionando para home...');
+      toast({
+        title: "🔌 Conexão necessária",
+        description: "Conecte-se ao Mercado Livre para acessar o dashboard",
+      });
+      navigate('/');
+      return;
+    }
+
+    // Carregar últimos cálculos se autenticado
+    if (user && hasMLConnection) {
+      loadLastCalculations().then(savedProducts => {
+        if (savedProducts.length > 0) {
+          console.log('📋 Carregando cálculos salvos:', savedProducts.length);
+          setProducts(savedProducts);
+          setCurrentZipCode(lastZipCode);
+          
+          toast({
+            title: "📋 Cálculos restaurados",
+            description: `${savedProducts.length} produtos com cálculos anteriores carregados`,
+          });
+        }
+      });
+    }
+  }, [user, navigate, loadLastCalculations, lastZipCode]);
+
+  // Salvar cálculos automaticamente quando produtos ou CEP mudam
+  useEffect(() => {
+    if (user && currentZipCode && products.length > 0) {
+      const calculatedProducts = products.filter(p => 
+        p.freightCost !== undefined && p.sellerFreightCost !== undefined
+      );
+      
+      if (calculatedProducts.length > 0) {
+        console.log('💾 Salvando cálculos automaticamente...');
+        saveCalculations(products, currentZipCode);
+      }
+    }
+  }, [products, currentZipCode, user, saveCalculations]);
 
   const handleConnectionChange = (connected: boolean) => {
     setHasConnection(connected);
     if (!connected) {
       setProducts([]);
       setPagination(undefined);
+      // Redirecionar para home quando desconectado
+      console.log('🔌 Desconectado do ML, redirecionando...');
+      navigate('/');
     }
   };
 
@@ -59,6 +118,10 @@ export const Dashboard = () => {
     }));
   };
 
+  const handleZipCodeChange = (zipCode: string) => {
+    setCurrentZipCode(zipCode);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       <div className="container mx-auto px-4 py-8">
@@ -70,6 +133,11 @@ export const Dashboard = () => {
             <p className="text-gray-600">
               Bem-vindo, {user?.email || 'Usuário'}
             </p>
+            {isLoadingCalculations && (
+              <p className="text-sm text-blue-600 mt-1">
+                📋 Carregando cálculos anteriores...
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={hasConnection ? "default" : "secondary"}>
@@ -134,6 +202,8 @@ export const Dashboard = () => {
               onFreightCalculated={handleFreightCalculated}
               loadingFreight={loadingFreight}
               setLoadingFreight={setLoadingFreight}
+              initialZipCode={lastZipCode}
+              onZipCodeChange={handleZipCodeChange}
             />
           </TabsContent>
 

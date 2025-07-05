@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +47,6 @@ serve(async (req) => {
       } else if (contentType?.includes('application/x-www-form-urlencoded')) {
         const formData = await req.formData();
         const formObj = Object.fromEntries(formData.entries());
-        // Try to parse if it's JSON string in form data
         try {
           notification = JSON.parse(formObj.toString());
         } catch {
@@ -136,6 +136,11 @@ async function processFreightNotification(notification: MLNotification) {
     }
   }
   
+  if (itemId) {
+    console.log('📦 Item ID identificado:', itemId);
+    await invalidateFreightCache(itemId);
+  }
+  
   // Analyze shipping changes
   const shippingData = notification.data?.shipping;
   
@@ -150,7 +155,6 @@ async function processFreightNotification(notification: MLNotification) {
     if (shippingData.mandatory_free_shipping !== undefined) {
       console.log('🔄 MUDANÇA DETECTADA: Status de frete grátis obrigatório');
       
-      // Mark cache as invalid for this item
       if (itemId) {
         await invalidateFreightCache(itemId);
       }
@@ -178,14 +182,29 @@ async function processFreightNotification(notification: MLNotification) {
 async function invalidateFreightCache(itemId: string) {
   console.log(`🗑️ INVALIDANDO CACHE DE FRETE PARA ITEM: ${itemId}`);
   
-  // Here we could store in a database, but for now we'll log it
-  // The frontend will check for changes periodically
-  console.log(`Cache invalidated for item ${itemId} at ${new Date().toISOString()}`);
-  
-  // We could implement a more sophisticated system here:
-  // 1. Store invalidation timestamps in database
-  // 2. Notify connected clients via WebSocket/Server-Sent Events
-  // 3. Store the actual freight changes for comparison
-  
-  return true;
+  try {
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Mark all current freight calculations for this item as outdated
+    const { error } = await supabase
+      .from('freight_history')
+      .update({ 
+        is_current: false,
+        notification_received_at: new Date().toISOString()
+      })
+      .eq('product_id', itemId)
+      .eq('is_current', true);
+    
+    if (error) {
+      console.error('❌ Erro ao invalidar cache:', error);
+    } else {
+      console.log(`✅ Cache invalidado para item ${itemId}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro ao acessar banco de dados:', error);
+  }
 }

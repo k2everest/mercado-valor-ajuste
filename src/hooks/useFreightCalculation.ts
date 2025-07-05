@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { FreightDebugger } from '@/utils/freightDebug';
+import { useFreightPersistence } from './useFreightPersistence';
 
 interface FreightCallResult {
   attempt: number;
@@ -23,6 +24,7 @@ interface ConsensusResult extends FreightCallResult {
 
 export const useFreightCalculation = () => {
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
+  const { saveFreightHistory, getCurrentFreight } = useFreightPersistence();
 
   const makeFreightCall = async (productId: string, zipCode: string, attempt: number): Promise<FreightCallResult> => {
     try {
@@ -145,6 +147,22 @@ export const useFreightCalculation = () => {
       return null;
     }
 
+    // Verificar se já existe cálculo atual
+    const existingFreight = await getCurrentFreight(productId, cleanZipCode);
+    if (existingFreight) {
+      console.log('📋 Usando frete do histórico:', existingFreight);
+      toast({
+        title: "📋 Frete do histórico",
+        description: `${existingFreight.freight_method}: Cliente R$ ${existingFreight.freight_cost} | Vendedor R$ ${existingFreight.seller_freight_cost}`,
+      });
+
+      return {
+        freightCost: Number(existingFreight.freight_cost),
+        sellerFreightCost: Number(existingFreight.seller_freight_cost),
+        freightMethod: `${existingFreight.freight_method} (Histórico)`
+      };
+    }
+
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
 
     try {
@@ -158,7 +176,6 @@ export const useFreightCalculation = () => {
       for (let i = 1; i <= 3; i++) {
         console.log(`🔄 Tentativa ${i}/3...`);
         
-        // Atualizar toast com progresso
         toast({
           title: `🔄 Calculando frete... (${i}/3)`,
           description: `Fazendo múltiplas chamadas para garantir precisão`,
@@ -173,7 +190,6 @@ export const useFreightCalculation = () => {
           console.log(`❌ Tentativa ${i}: ${result.error}`);
         }
 
-        // Delay entre chamadas para evitar rate limiting
         if (i < 3) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
@@ -185,6 +201,15 @@ export const useFreightCalculation = () => {
       const finalCustomerCost = consensusResult.price;
       const finalSellerCost = consensusResult.sellerCost;
       const reliability = consensusResult.consensus.reliability;
+
+      // Salvar no histórico
+      await saveFreightHistory(
+        productId,
+        cleanZipCode,
+        finalCustomerCost,
+        finalSellerCost,
+        consensusResult.method
+      );
 
       // Log debug information
       FreightDebugger.logFreightCalculation({

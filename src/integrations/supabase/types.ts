@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      freight_history: {
+        Row: {
+          calculated_at: string
+          created_at: string
+          freight_cost: number
+          freight_method: string
+          id: string
+          is_current: boolean
+          notification_received_at: string | null
+          product_id: string
+          seller_freight_cost: number
+          user_id: string
+          zip_code: string
+        }
+        Insert: {
+          calculated_at?: string
+          created_at?: string
+          freight_cost: number
+          freight_method: string
+          id?: string
+          is_current?: boolean
+          notification_received_at?: string | null
+          product_id: string
+          seller_freight_cost: number
+          user_id: string
+          zip_code: string
+        }
+        Update: {
+          calculated_at?: string
+          created_at?: string
+          freight_cost?: number
+          freight_method?: string
+          id?: string
+          is_current?: boolean
+          notification_received_at?: string | null
+          product_id?: string
+          seller_freight_cost?: number
+          user_id?: string
+          zip_code?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -30,6 +72,33 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_last_calculations: {
+        Row: {
+          calculations: Json
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          zip_code: string | null
+        }
+        Insert: {
+          calculations?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          zip_code?: string | null
+        }
+        Update: {
+          calculations?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          zip_code?: string | null
         }
         Relationships: []
       }
