@@ -63,10 +63,23 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
   // Calculate standard deviation for products with sales data
   const productsWithSales = products.filter(p => p.soldQuantity !== undefined && p.soldQuantity > 0);
   const salesData = productsWithSales.map(p => p.soldQuantity || 0);
-  const meanSales = salesData.length > 0 ? salesData.reduce((a, b) => a + b, 0) / salesData.length : 0;
+  
+  // Calculate median sales
+  const sortedSales = [...salesData].sort((a, b) => a - b);
+  const medianSales = sortedSales.length > 0 ? 
+    sortedSales.length % 2 === 0
+      ? (sortedSales[sortedSales.length / 2 - 1] + sortedSales[sortedSales.length / 2]) / 2
+      : sortedSales[Math.floor(sortedSales.length / 2)]
+    : 0;
+  
+  // Calculate standard deviation using median
   const variance = salesData.length > 0 ? 
-    salesData.reduce((acc, val) => acc + Math.pow(val - meanSales, 2), 0) / salesData.length : 0;
+    salesData.reduce((acc, val) => acc + Math.pow(val - medianSales, 2), 0) / salesData.length : 0;
   const standardDeviation = Math.sqrt(variance);
+  
+  // Find highest sales (best service quality indicator)
+  const highestSales = Math.max(...salesData, 0);
+  const topPerformers = productsWithSales.filter(p => p.soldQuantity === highestSales).length;
 
   if (loading) {
     return (
@@ -139,22 +152,26 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
       {settings.standard_deviation_enabled && productsWithSales.length > 0 && (
         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
           <h4 className="font-semibold text-blue-900 mb-2">📊 Análise Estatística de Vendas</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Produtos com histórico:</span>
               <span className="font-semibold ml-2">{productsWithSales.length}</span>
             </div>
             <div>
-              <span className="text-gray-600">Vendas médias:</span>
-              <span className="font-semibold ml-2">{meanSales.toFixed(1)} unidades</span>
+              <span className="text-gray-600">Vendas medianas:</span>
+              <span className="font-semibold ml-2">{medianSales.toFixed(1)} unidades</span>
             </div>
             <div>
               <span className="text-gray-600">Desvio padrão:</span>
               <span className="font-semibold ml-2">±{standardDeviation.toFixed(1)} unidades</span>
             </div>
+            <div>
+              <span className="text-gray-600">Maior venda mensal:</span>
+              <span className="font-semibold ml-2 text-green-600">{highestSales} unidades ({topPerformers} produtos)</span>
+            </div>
           </div>
           <p className="text-xs text-blue-700 mt-2">
-            💡 Produtos com vendas consistentes (baixo desvio padrão) são melhores candidatos para otimização de frete
+            💡 Produtos com maiores vendas mensais têm melhor qualidade de serviço e são prioridade para otimização
           </p>
         </div>
       )}
