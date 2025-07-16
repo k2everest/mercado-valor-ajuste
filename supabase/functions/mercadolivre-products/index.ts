@@ -137,42 +137,69 @@ serve(async (req) => {
 
       console.log('📋 Total de IDs de itens coletados:', allItemIds.length)
 
-      // Get detailed information for all items with better error handling
+      // Get detailed information for all items with much better performance
       const products = []
-      let processedCount = 0
       
-      for (const itemId of allItemIds) {
-        try {
-          const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
-          })
-
-          if (itemResponse.ok) {
-            const item = await itemResponse.json()
-            products.push({
-              id: item.id,
-              title: item.title,
-              originalPrice: item.price,
-              status: item.status,
-              freeShipping: item.shipping?.free_shipping || false,
-              permalink: item.permalink,
-              thumbnail: item.thumbnail,
-              availableQuantity: item.available_quantity,
-              soldQuantity: item.sold_quantity,
+      // Process items in parallel batches of 30 for optimal performance
+      const processBatchOptimized = async (batch: string[]) => {
+        const batchPromises = batch.map(async (itemId) => {
+          try {
+            const itemResponse = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+              },
             })
-          } else {
-            console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
+
+            if (itemResponse.ok) {
+              const item = await itemResponse.json()
+              return {
+                id: item.id,
+                title: item.title,
+                originalPrice: item.price,
+                price: item.price, // Add price for compatibility
+                status: item.status,
+                freeShipping: item.shipping?.free_shipping || false,
+                permalink: item.permalink,
+                thumbnail: item.thumbnail,
+                availableQuantity: item.available_quantity,
+                soldQuantity: item.sold_quantity,
+              }
+            } else {
+              console.warn(`⚠️ Falha ao buscar item ${itemId}:`, itemResponse.status)
+              return null
+            }
+          } catch (error) {
+            console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
+            return null
           }
-          
-          processedCount++
-          if (processedCount % 50 === 0) {
-            console.log(`📊 Processados ${processedCount}/${allItemIds.length} produtos`)
-          }
-        } catch (error) {
-          console.warn(`⚠️ Erro ao buscar item ${itemId}:`, error.message)
-        }
+        })
+        
+        const results = await Promise.all(batchPromises)
+        return results.filter(item => item !== null)
+      }
+
+      // Split into batches and process in parallel
+      const batchSize = 30
+      const batches = []
+      for (let i = 0; i < allItemIds.length; i += batchSize) {
+        batches.push(allItemIds.slice(i, i + batchSize))
+      }
+      
+      console.log(`🚀 Processando ${allItemIds.length} produtos em ${batches.length} lotes paralelos...`)
+      
+      // Process all batches in parallel for maximum speed
+      const batchPromises = batches.map((batch, index) => 
+        processBatchOptimized(batch).then(results => {
+          console.log(`📦 Lote ${index + 1}/${batches.length} concluído: ${results.length} produtos`)
+          return results
+        })
+      )
+      
+      const batchResults = await Promise.all(batchPromises)
+      
+      // Flatten all results
+      for (const batchResult of batchResults) {
+        products.push(...batchResult)
       }
 
       console.log('✅ Processamento de TODOS os produtos concluído:', products.length)
@@ -280,15 +307,23 @@ serve(async (req) => {
       return results.filter(item => item !== null)
     }
 
-    // Process in batches of 10 to avoid overwhelming the API
-    const batchSize2 = 10
+    // Process in parallel batches of 20 for better performance
+    const batchSize2 = 20
+    const batches = []
     for (let i = 0; i < itemsToProcess.length; i += batchSize2) {
-      const batch = itemsToProcess.slice(i, i + batchSize2)
-      const batchResults = await processBatch(batch)
-      products.push(...batchResults)
-      
-      console.log(`📦 Processado lote ${Math.floor(i/batchSize2) + 1}/${Math.ceil(itemsToProcess.length/batchSize2)}`)
+      batches.push(itemsToProcess.slice(i, i + batchSize2))
     }
+    
+    // Process all batches in parallel for much faster execution
+    const batchPromises = batches.map(batch => processBatch(batch))
+    const batchResults = await Promise.all(batchPromises)
+    
+    // Flatten results
+    for (const result of batchResults) {
+      products.push(...result)
+    }
+    
+    console.log(`📦 Processados ${batches.length} lotes em paralelo com ${products.length} produtos`);
 
     console.log('✅ Produtos processados com sucesso:', products.length)
 

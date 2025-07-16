@@ -111,24 +111,33 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          predicted_savings_enabled: boolean | null
           preferred_language: string | null
           shipping_cost: number | null
+          standard_deviation_enabled: boolean | null
+          stock_sales_percentage: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          predicted_savings_enabled?: boolean | null
           preferred_language?: string | null
           shipping_cost?: number | null
+          standard_deviation_enabled?: boolean | null
+          stock_sales_percentage?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
+          predicted_savings_enabled?: boolean | null
           preferred_language?: string | null
           shipping_cost?: number | null
+          standard_deviation_enabled?: boolean | null
+          stock_sales_percentage?: number | null
           updated_at?: string
           user_id?: string
         }

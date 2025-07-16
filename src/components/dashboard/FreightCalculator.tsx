@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useFreightCalculation } from "@/hooks/useFreightCalculation";
+import { FreightSummaryHeader } from "./FreightSummaryHeader";
 import { Calculator, MapPin, Package, DollarSign } from "lucide-react";
 import { Product } from './types';
 
@@ -113,29 +114,8 @@ export const FreightCalculator = ({
             </Button>
           </div>
 
-          {/* Resumo dos cálculos */}
-          {productsWithFreight.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {productsWithFreight.length}
-                </div>
-                <div className="text-sm text-gray-600">Produtos Calculados</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  R$ {totalFreightCost.toFixed(2)}
-                </div>
-                <div className="text-sm text-gray-600">Frete Cliente</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  R$ {totalSellerFreight.toFixed(2)}
-                </div>
-                <div className="text-sm text-gray-600">Custo Vendedor</div>
-              </div>
-            </div>
-          )}
+          {/* Resumo dos cálculos - Nova versão com economia prevista */}
+          {productsWithFreight.length > 0 && <FreightSummaryHeader products={productsWithFreight} />}
         </CardContent>
       </Card>
 
