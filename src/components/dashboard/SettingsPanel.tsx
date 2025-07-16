@@ -9,13 +9,15 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Settings, Save, TrendingUp, BarChart3 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Settings, Save, TrendingUp, BarChart3, Star } from "lucide-react";
 
 export const SettingsPanel = () => {
   const [shippingCost, setShippingCost] = useState(25.00);
   const [stockSalesPercentage, setStockSalesPercentage] = useState(10.0);
   const [predictedSavingsEnabled, setPredictedSavingsEnabled] = useState(true);
   const [standardDeviationEnabled, setStandardDeviationEnabled] = useState(true);
+  const [serviceQualityThreshold, setServiceQualityThreshold] = useState(50.0);
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   
@@ -44,6 +46,7 @@ export const SettingsPanel = () => {
           setStockSalesPercentage(data.stock_sales_percentage || 10.0);
           setPredictedSavingsEnabled(data.predicted_savings_enabled ?? true);
           setStandardDeviationEnabled(data.standard_deviation_enabled ?? true);
+          setServiceQualityThreshold(data.service_quality_threshold || 50.0);
         }
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -68,6 +71,7 @@ export const SettingsPanel = () => {
           stock_sales_percentage: stockSalesPercentage,
           predicted_savings_enabled: predictedSavingsEnabled,
           standard_deviation_enabled: standardDeviationEnabled,
+          service_quality_threshold: serviceQualityThreshold,
           updated_at: new Date().toISOString()
         });
 
@@ -201,6 +205,32 @@ export const SettingsPanel = () => {
                   checked={standardDeviationEnabled}
                   onCheckedChange={setStandardDeviationEnabled}
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-yellow-600" />
+                  <Label htmlFor="service-quality">Limite de Qualidade de Serviço</Label>
+                </div>
+                <div className="space-y-2">
+                  <Slider
+                    id="service-quality"
+                    value={[serviceQualityThreshold]}
+                    onValueChange={(value) => setServiceQualityThreshold(value[0])}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-sm text-gray-500">
+                    <span>Baixa (0)</span>
+                    <span className="font-medium">{serviceQualityThreshold.toFixed(0)} unidades</span>
+                    <span>Alta (100)</span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Produtos com vendas mensais acima deste valor têm qualidade de serviço alta
+                </p>
               </div>
             </div>
           </div>

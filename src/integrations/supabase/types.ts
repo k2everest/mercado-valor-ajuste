@@ -113,6 +113,7 @@ export type Database = {
           id: string
           predicted_savings_enabled: boolean | null
           preferred_language: string | null
+          service_quality_threshold: number | null
           shipping_cost: number | null
           standard_deviation_enabled: boolean | null
           stock_sales_percentage: number | null
@@ -124,6 +125,7 @@ export type Database = {
           id?: string
           predicted_savings_enabled?: boolean | null
           preferred_language?: string | null
+          service_quality_threshold?: number | null
           shipping_cost?: number | null
           standard_deviation_enabled?: boolean | null
           stock_sales_percentage?: number | null
@@ -135,6 +137,7 @@ export type Database = {
           id?: string
           predicted_savings_enabled?: boolean | null
           preferred_language?: string | null
+          service_quality_threshold?: number | null
           shipping_cost?: number | null
           standard_deviation_enabled?: boolean | null
           stock_sales_percentage?: number | null

@@ -12,6 +12,7 @@ interface UserSettings {
   stock_sales_percentage: number;
   predicted_savings_enabled: boolean;
   standard_deviation_enabled: boolean;
+  service_quality_threshold: number;
 }
 
 export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) => {
@@ -19,7 +20,8 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
   const [settings, setSettings] = useState<UserSettings>({
     stock_sales_percentage: 10.0,
     predicted_savings_enabled: true,
-    standard_deviation_enabled: true
+    standard_deviation_enabled: true,
+    service_quality_threshold: 50.0
   });
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +32,7 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
       try {
         const { data } = await supabase
           .from('user_settings')
-          .select('stock_sales_percentage, predicted_savings_enabled, standard_deviation_enabled')
+          .select('stock_sales_percentage, predicted_savings_enabled, standard_deviation_enabled, service_quality_threshold')
           .eq('user_id', user.id)
           .single();
 
@@ -38,7 +40,8 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
           setSettings({
             stock_sales_percentage: data.stock_sales_percentage || 10.0,
             predicted_savings_enabled: data.predicted_savings_enabled ?? true,
-            standard_deviation_enabled: data.standard_deviation_enabled ?? true
+            standard_deviation_enabled: data.standard_deviation_enabled ?? true,
+            service_quality_threshold: data.service_quality_threshold || 50.0
           });
         }
       } catch (error) {
@@ -80,6 +83,11 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
   // Find highest sales (best service quality indicator)
   const highestSales = Math.max(...salesData, 0);
   const topPerformers = productsWithSales.filter(p => p.soldQuantity === highestSales).length;
+  
+  // Count products above service quality threshold
+  const highQualityProducts = productsWithSales.filter(p => 
+    (p.soldQuantity || 0) >= settings.service_quality_threshold
+  ).length;
 
   if (loading) {
     return (
@@ -168,6 +176,16 @@ export const FreightSummaryHeader = ({ products }: FreightSummaryHeaderProps) =>
             <div>
               <span className="text-gray-600">Maior venda mensal:</span>
               <span className="font-semibold ml-2 text-green-600">{highestSales} unidades ({topPerformers} produtos)</span>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600 text-sm">
+                🌟 Produtos com Alta Qualidade de Serviço (≥{settings.service_quality_threshold} vendas):
+              </span>
+              <span className="font-semibold text-yellow-700">
+                {highQualityProducts} de {productsWithSales.length} produtos
+              </span>
             </div>
           </div>
           <p className="text-xs text-blue-700 mt-2">
