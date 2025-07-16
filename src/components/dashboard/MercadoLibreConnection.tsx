@@ -6,6 +6,8 @@ import { toast } from "@/hooks/use-toast";
 import { ShoppingCart, Shield, Zap, AlertCircle, RefreshCw, Unlink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Product, PaginationInfo } from './types';
+import { SecureStorage } from '@/utils/secureStorage';
+import { InputValidator } from '@/utils/inputValidation';
 
 interface MercadoLibreConnectionProps {
   onConnectionChange: (connected: boolean) => void;
@@ -16,16 +18,19 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const { t } = useLanguage();
+  
+  // Rate limiter for API calls
+  const rateLimiter = InputValidator.createRateLimiter(10, 60000); // 10 requests per minute
 
-  const isConnected = !!localStorage.getItem('ml_access_token');
+  const isConnected = !!SecureStorage.getSecureItem('ml_access_token');
 
   const handleDisconnect = () => {
     setDisconnecting(true);
     
     try {
-      localStorage.removeItem('ml_access_token');
-      localStorage.removeItem('ml_token_timestamp');
-      localStorage.removeItem('ml_oauth_state');
+      SecureStorage.removeSecureItem('ml_access_token');
+      SecureStorage.removeSecureItem('ml_token_timestamp');
+      SecureStorage.removeSecureItem('ml_oauth_state');
       
       toast({
         title: "🔌 Desconectado",
@@ -49,6 +54,16 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
 
   const loadProducts = async (token: string) => {
     console.log('🔍 Carregando produtos do Mercado Livre...');
+    
+    // Check rate limit
+    if (!rateLimiter.checkLimit()) {
+      toast({
+        title: "⚠️ Limite de requisições",
+        description: `Aguarde ${Math.ceil(rateLimiter.getRemainingTime() / 1000)} segundos antes de tentar novamente`,
+        variant: "destructive"
+      });
+      return false;
+    }
     
     try {
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
@@ -85,8 +100,8 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           error.message?.includes('invalid access token')) {
         
         console.log('🗑️ Token inválido, removendo...');
-        localStorage.removeItem('ml_access_token');
-        localStorage.removeItem('ml_token_timestamp');
+        SecureStorage.removeSecureItem('ml_access_token');
+        SecureStorage.removeSecureItem('ml_token_timestamp');
         onConnectionChange(false);
         onConnect([]);
         
@@ -120,8 +135,19 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
     try {
       console.log('🔄 Iniciando processo de conexão...');
       
+      // Check rate limit
+      if (!rateLimiter.checkLimit()) {
+        toast({
+          title: "⚠️ Limite de requisições",
+          description: `Aguarde ${Math.ceil(rateLimiter.getRemainingTime() / 1000)} segundos antes de tentar novamente`,
+          variant: "destructive"
+        });
+        setConnecting(false);
+        return;
+      }
+      
       // Verificar se já existe um token válido
-      const storedToken = localStorage.getItem('ml_access_token');
+      const storedToken = SecureStorage.getSecureItem('ml_access_token');
       if (storedToken) {
         console.log('🔑 Token encontrado, testando e carregando produtos...');
         
@@ -145,7 +171,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       
       // Gerar estado único para OAuth
       const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('ml_oauth_state', state);
+      SecureStorage.setSecureItem('ml_oauth_state', state);
 
       // Obter URL de autorização
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
@@ -184,7 +210,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           console.log('✅ Autorização recebida com sucesso');
           
           // Validar estado
-          const savedState = localStorage.getItem('ml_oauth_state');
+          const savedState = SecureStorage.getSecureItem('ml_oauth_state');
           if (returnedState !== savedState) {
             throw new Error('Estado de segurança inválido. Tente novamente.');
           }
@@ -205,8 +231,8 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             }
 
             console.log('🔑 Token obtido, salvando e carregando produtos...');
-            localStorage.setItem('ml_access_token', tokenData.access_token);
-            localStorage.setItem('ml_token_timestamp', Date.now().toString());
+            SecureStorage.setSecureItem('ml_access_token', tokenData.access_token);
+            SecureStorage.setSecureItem('ml_token_timestamp', Date.now().toString());
             
             // Carregar produtos com o novo token
             const success = await loadProducts(tokenData.access_token);
@@ -228,7 +254,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           } finally {
             authWindow?.close();
             window.removeEventListener('message', handleMessage);
-            localStorage.removeItem('ml_oauth_state');
+            SecureStorage.removeSecureItem('ml_oauth_state');
             setConnecting(false);
           }
         }
@@ -242,7 +268,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           });
           authWindow?.close();
           window.removeEventListener('message', handleMessage);
-          localStorage.removeItem('ml_oauth_state');
+          SecureStorage.removeSecureItem('ml_oauth_state');
           setConnecting(false);
         }
       };
@@ -254,7 +280,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
         if (authWindow?.closed) {
           clearInterval(checkClosed);
           window.removeEventListener('message', handleMessage);
-          localStorage.removeItem('ml_oauth_state');
+          SecureStorage.removeSecureItem('ml_oauth_state');
           setConnecting(false);
           
           if (connecting) {

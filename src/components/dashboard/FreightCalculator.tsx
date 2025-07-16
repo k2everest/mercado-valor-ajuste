@@ -9,6 +9,7 @@ import { useFreightCalculation } from "@/hooks/useFreightCalculation";
 import { FreightSummaryHeader } from "./FreightSummaryHeader";
 import { Calculator, MapPin, Package, DollarSign } from "lucide-react";
 import { Product } from './types';
+import { InputValidator } from '@/utils/inputValidation';
 
 interface FreightCalculatorProps {
   products: Product[];
@@ -32,6 +33,7 @@ export const FreightCalculator = ({
   onZipCodeChange
 }: FreightCalculatorProps) => {
   const [zipCode, setZipCode] = useState(initialZipCode);
+  const [zipCodeError, setZipCodeError] = useState('');
   const { fetchFreightCosts } = useFreightCalculation();
 
   // Atualizar CEP quando o inicial mudar
@@ -43,6 +45,7 @@ export const FreightCalculator = ({
 
   const handleZipCodeChange = (value: string) => {
     setZipCode(value);
+    setZipCodeError('');
     onZipCodeChange?.(value);
   };
 
@@ -54,6 +57,12 @@ export const FreightCalculator = ({
   };
 
   const calculateAllFreights = async () => {
+    // Validate CEP format
+    if (!InputValidator.validateCEP(zipCode)) {
+      setZipCodeError('CEP deve ter o formato 00000-000 ou 00000000');
+      return;
+    }
+    
     for (const product of products) {
       if (!loadingFreight[product.id]) {
         await calculateFreight(product.id);
@@ -103,7 +112,11 @@ export const FreightCalculator = ({
                 value={zipCode}
                 onChange={(e) => handleZipCodeChange(e.target.value)}
                 maxLength={9}
+                className={zipCodeError ? 'border-red-500' : ''}
               />
+              {zipCodeError && (
+                <p className="text-sm text-red-500 mt-1">{zipCodeError}</p>
+              )}
             </div>
             <Button 
               onClick={calculateAllFreights}
@@ -190,7 +203,13 @@ export const FreightCalculator = ({
 
                   <div className="flex flex-col gap-2">
                     <Button
-                      onClick={() => calculateFreight(product.id)}
+                      onClick={() => {
+                        if (!InputValidator.validateCEP(zipCode)) {
+                          setZipCodeError('CEP deve ter o formato 00000-000 ou 00000000');
+                          return;
+                        }
+                        calculateFreight(product.id);
+                      }}
                       disabled={!zipCode || loadingFreight[product.id]}
                       size="sm"
                     >

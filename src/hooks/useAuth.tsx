@@ -2,6 +2,8 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { InputValidator } from '@/utils/inputValidation';
+import { SecureStorage } from '@/utils/secureStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -48,28 +50,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
+    // Validate input
+    if (!InputValidator.validateEmail(email)) {
+      return { error: { message: 'Invalid email format' } };
+    }
+    
+    const passwordValidation = InputValidator.validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return { error: { message: passwordValidation.errors.join(', ') } };
+    }
+    
+    // Sanitize full name if provided
+    const sanitizedFullName = fullName ? InputValidator.sanitizeHTML(fullName.trim()) : undefined;
+    
     const redirectUrl = `${window.location.origin}/`;
     
     const { error } = await supabase.auth.signUp({
-      email,
+      email: email.toLowerCase().trim(),
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: fullName ? { full_name: fullName } : undefined
+        data: sanitizedFullName ? { full_name: sanitizedFullName } : undefined
       }
     });
     return { error };
   };
 
   const signIn = async (email: string, password: string) => {
+    // Validate email format
+    if (!InputValidator.validateEmail(email)) {
+      return { error: { message: 'Invalid email format' } };
+    }
+    
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.toLowerCase().trim(),
       password
     });
     return { error };
   };
 
   const signOut = async () => {
+    // Clear secure storage on logout
+    SecureStorage.clearAll();
     await supabase.auth.signOut();
   };
 
