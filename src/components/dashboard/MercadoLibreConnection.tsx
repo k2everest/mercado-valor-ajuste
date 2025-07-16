@@ -47,66 +47,44 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
     }
   };
 
-  const testTokenAndLoadProducts = async (token: string) => {
-    console.log('🔍 Testando token e carregando produtos...');
+  const loadProducts = async (token: string) => {
+    console.log('🔍 Carregando produtos do Mercado Livre...');
     
     try {
-      // Primeiro teste com limite baixo para validar o token
-      console.log('🔑 Validando token com teste inicial...');
-      const { data: testData, error: testError } = await supabase.functions.invoke('mercadolivre-products', {
-        body: { accessToken: token, limit: 1, offset: 0 }
-      });
-
-      if (testError) {
-        console.error('❌ Erro na validação do token:', testError);
-        throw new Error(testError.message || 'Token inválido');
-      }
-
-      if (!testData || testData.error) {
-        console.error('❌ Resposta inválida do teste:', testData);
-        throw new Error(testData?.error || 'Falha na validação do token');
-      }
-
-      console.log('✅ Token válido! Carregando produtos completos...');
-      
-      // Agora carrega os produtos completos
-      const { data: allProductsData, error: allProductsError } = await supabase.functions.invoke('mercadolivre-products', {
+      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
         body: { accessToken: token, limit: 50, offset: 0 }
       });
 
-      if (allProductsError) {
-        console.error('❌ Erro ao carregar produtos:', allProductsError);
-        throw new Error(`Erro ao buscar produtos: ${allProductsError.message}`);
+      if (error) {
+        console.error('❌ Erro na API de produtos:', error);
+        throw new Error(error.message || 'Erro ao buscar produtos');
       }
 
-      if (!allProductsData || allProductsData.error) {
-        console.error('❌ Erro na resposta dos produtos:', allProductsData);
-        throw new Error(allProductsData?.error || 'Falha ao carregar produtos');
+      if (!data || data.error) {
+        console.error('❌ Resposta inválida da API:', data);
+        throw new Error(data?.error || 'Falha ao carregar produtos');
       }
 
-      const products = allProductsData.products || [];
-      console.log(`✅ Produtos carregados com sucesso: ${products.length} itens`);
+      const products = data.products || [];
+      console.log(`✅ Produtos carregados: ${products.length} itens`);
 
-      toast({
-        title: "✅ Reconectado com sucesso!",
-        description: `${products.length} produtos importados do Mercado Livre`,
-      });
+      // Converter produtos para o formato correto
+      const formattedProducts = products.map((product: any) => ({
+        ...product,
+        price: product.originalPrice || product.price
+      }));
 
-      onConnectionChange(true);
-      onConnect(products, allProductsData.pagination);
-      return true;
-
-    } catch (error: any) {
-      console.error('❌ Erro na validação/carregamento:', error);
+      onConnect(formattedProducts, data.pagination);
       
-      // Verificar se é erro de token inválido
-      const errorMessage = error.message || '';
-      if (errorMessage.includes('INVALID_TOKEN') || 
-          errorMessage.includes('unauthorized') || 
-          errorMessage.includes('invalid access token') ||
-          errorMessage.includes('Token inválido')) {
+      return true;
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar produtos:', error);
+      
+      if (error.message?.includes('INVALID_TOKEN') || 
+          error.message?.includes('unauthorized') || 
+          error.message?.includes('invalid access token')) {
         
-        console.log('🗑️ Token inválido detectado, removendo do localStorage...');
+        console.log('🗑️ Token inválido, removendo...');
         localStorage.removeItem('ml_access_token');
         localStorage.removeItem('ml_token_timestamp');
         onConnectionChange(false);
@@ -121,9 +99,8 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
         return false;
       }
       
-      // Outros erros
       toast({
-        title: "❌ Erro na conexão",
+        title: "❌ Erro ao carregar produtos",
         description: error.message || "Erro ao conectar com o Mercado Livre",
         variant: "destructive"
       });
@@ -134,7 +111,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
 
   const handleConnect = async () => {
     if (connecting) {
-      console.log('⚠️ Conexão já em andamento, ignorando...');
+      console.log('⚠️ Conexão já em andamento...');
       return;
     }
     
@@ -146,16 +123,21 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       // Verificar se já existe um token válido
       const storedToken = localStorage.getItem('ml_access_token');
       if (storedToken) {
-        console.log('🔑 Token encontrado no localStorage, testando validade...');
+        console.log('🔑 Token encontrado, testando e carregando produtos...');
         
         try {
-          const isValid = await testTokenAndLoadProducts(storedToken);
-          if (isValid) {
-            console.log('✅ Reconexão bem-sucedida com token existente');
+          const success = await loadProducts(storedToken);
+          if (success) {
+            console.log('✅ Reconexão bem-sucedida');
+            onConnectionChange(true);
+            toast({
+              title: "✅ Reconectado com sucesso!",
+              description: "Produtos carregados do Mercado Livre",
+            });
             return;
           }
         } catch (error) {
-          console.log('⚠️ Token existente inválido, prosseguindo com nova autenticação...');
+          console.log('⚠️ Token existente inválido, iniciando nova autenticação...');
         }
       }
       
@@ -222,12 +204,19 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
               throw new Error('Token de acesso não recebido');
             }
 
-            console.log('🔑 Token obtido, salvando e validando...');
+            console.log('🔑 Token obtido, salvando e carregando produtos...');
             localStorage.setItem('ml_access_token', tokenData.access_token);
             localStorage.setItem('ml_token_timestamp', Date.now().toString());
             
-            // Testar o novo token
-            await testTokenAndLoadProducts(tokenData.access_token);
+            // Carregar produtos com o novo token
+            const success = await loadProducts(tokenData.access_token);
+            if (success) {
+              onConnectionChange(true);
+              toast({
+                title: "✅ Conectado com sucesso!",
+                description: "Produtos importados do Mercado Livre",
+              });
+            }
             
           } catch (error: any) {
             console.error('❌ Erro no processamento da autorização:', error);
@@ -314,12 +303,12 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
                 {connecting ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Reconectando...
+                    Carregando produtos...
                   </>
                 ) : (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2" />
-                    Reconectar
+                    Recarregar produtos
                   </>
                 )}
               </Button>
@@ -394,7 +383,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             {connecting ? (
               <>
                 <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
-                Conectando...
+                Conectando e carregando produtos...
               </>
             ) : (
               "Conectar com Mercado Livre"
