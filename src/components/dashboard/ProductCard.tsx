@@ -6,6 +6,7 @@ import { ExternalLink, Minus, Plus, Truck, Bug, Trash2 } from "lucide-react";
 import { Product } from './types';
 import { FreightDebugger } from '@/utils/freightDebug';
 import { toast } from "@/hooks/use-toast";
+import { memo, useCallback, useMemo } from "react";
 
 interface ProductCardProps {
   product: Product;
@@ -15,32 +16,32 @@ interface ProductCardProps {
   zipCode: string;
 }
 
-export const ProductCard = ({ 
+export const ProductCard = memo(({ 
   product, 
   onCalculateFreight, 
   onAdjustPrice, 
   loadingFreight, 
   zipCode 
 }: ProductCardProps) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const statusColor = useMemo(() => {
+    switch (product.status) {
       case 'active': return 'bg-green-100 text-green-800 border-green-200';
       case 'paused': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'closed': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-  };
+  }, [product.status]);
 
-  const getStatusText = (status: string) => {
-    switch (status) {
+  const statusText = useMemo(() => {
+    switch (product.status) {
       case 'active': return 'Ativo';
       case 'paused': return 'Pausado';
       case 'closed': return 'Finalizado';
-      default: return status;
+      default: return product.status;
     }
-  };
+  }, [product.status]);
 
-  const debugProduct = () => {
+  const debugProduct = useCallback(() => {
     console.log(`🔍 DEBUG PRODUTO ${product.id}:`);
     console.log('- Título:', product.title);
     console.log('- Preço original:', product.originalPrice);
@@ -60,25 +61,25 @@ export const ProductCard = ({
       title: "🔍 Debug realizado",
       description: `Informações do produto ${product.id} no console`,
     });
-  };
+  }, [product.id]);
 
-  const clearProductCache = () => {
+  const clearProductCache = useCallback(() => {
     FreightDebugger.clearProductCache(product.id);
     toast({
       title: "🧹 Cache limpo",
       description: `Cache do produto ${product.id} removido`,
     });
-  };
+  }, [product.id]);
 
-  const forceRecalculate = () => {
+  const forceRecalculate = useCallback(() => {
     clearProductCache();
     onCalculateFreight(product.id);
-  };
+  }, [clearProductCache, onCalculateFreight, product.id]);
 
   // Get debug info to show source
-  const debugInfo = FreightDebugger.getProductDebugInfo(product.id);
-  const valueSource = debugInfo?.source || 'unknown';
-  const cacheAge = debugInfo?.cacheAge ? Math.round(debugInfo.cacheAge / (1000 * 60 * 60)) : null;
+  const debugInfo = useMemo(() => FreightDebugger.getProductDebugInfo(product.id), [product.id]);
+  const valueSource = useMemo(() => debugInfo?.source || 'unknown', [debugInfo]);
+  const cacheAge = useMemo(() => debugInfo?.cacheAge ? Math.round(debugInfo.cacheAge / (1000 * 60 * 60)) : null, [debugInfo]);
 
   return (
     <Card className="hover:shadow-lg transition-all duration-300 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50">
@@ -147,8 +148,8 @@ export const ProductCard = ({
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-3">
-                  <Badge className={getStatusColor(product.status)}>
-                    {getStatusText(product.status)}
+                  <Badge className={statusColor}>
+                    {statusText}
                   </Badge>
                   {product.freeShipping && (
                     <Badge className="bg-blue-100 text-blue-800 border-blue-200">
@@ -233,4 +234,4 @@ export const ProductCard = ({
       </CardContent>
     </Card>
   );
-};
+});

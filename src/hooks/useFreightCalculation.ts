@@ -1,9 +1,10 @@
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { FreightDebugger } from '@/utils/freightDebug';
 import { useFreightPersistence } from './useFreightPersistence';
+import { cacheManager } from '@/utils/cacheManager';
 
 interface FreightCallResult {
   attempt: number;
@@ -26,7 +27,7 @@ export const useFreightCalculation = () => {
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const { saveFreightHistory, getCurrentFreight } = useFreightPersistence();
 
-  const makeFreightCall = async (productId: string, zipCode: string, attempt: number): Promise<FreightCallResult> => {
+  const makeFreightCall = useCallback(async (productId: string, zipCode: string, attempt: number): Promise<FreightCallResult> => {
     try {
       const accessToken = localStorage.getItem('ml_access_token');
       if (!accessToken) {
@@ -69,9 +70,9 @@ export const useFreightCalculation = () => {
         error: error.message
       };
     }
-  };
+  }, []);
 
-  const findConsensusValue = (results: FreightCallResult[]): ConsensusResult => {
+  const findConsensusValue = useCallback((results: FreightCallResult[]): ConsensusResult => {
     const successfulResults = results.filter(r => r.success);
     
     if (successfulResults.length === 0) {
@@ -125,9 +126,9 @@ export const useFreightCalculation = () => {
         reliability: (frequency / successfulResults.length) * 100
       }
     };
-  };
+  }, []);
 
-  const fetchFreightCosts = async (productId: string, zipCode: string) => {
+  const fetchFreightCosts = useCallback(async (productId: string, zipCode: string) => {
     if (!zipCode || zipCode.trim().length === 0) {
       toast({
         title: "❌ CEP obrigatório",
@@ -147,20 +148,37 @@ export const useFreightCalculation = () => {
       return null;
     }
 
+    // Check cache first
+    const cacheKey = `freight_${productId}_${cleanZipCode}`;
+    const cachedResult = cacheManager.get<{freightCost: number; sellerFreightCost: number; freightMethod: string}>(cacheKey);
+    if (cachedResult) {
+      console.log('💾 Usando frete do cache:', cachedResult);
+      toast({
+        title: "💾 Frete do cache",
+        description: `${cachedResult.freightMethod}: Cliente R$ ${cachedResult.freightCost} | Vendedor R$ ${cachedResult.sellerFreightCost}`,
+      });
+      return cachedResult;
+    }
+
     // Verificar se já existe cálculo atual
     const existingFreight = await getCurrentFreight(productId, cleanZipCode);
     if (existingFreight) {
       console.log('📋 Usando frete do histórico:', existingFreight);
+      const result = {
+        freightCost: Number(existingFreight.freight_cost),
+        sellerFreightCost: Number(existingFreight.seller_freight_cost),
+        freightMethod: `${existingFreight.freight_method} (Histórico)`
+      };
+      
+      // Cache the historical result
+      cacheManager.set(cacheKey, result, 10 * 60 * 1000); // 10 minutes
+      
       toast({
         title: "📋 Frete do histórico",
         description: `${existingFreight.freight_method}: Cliente R$ ${existingFreight.freight_cost} | Vendedor R$ ${existingFreight.seller_freight_cost}`,
       });
 
-      return {
-        freightCost: Number(existingFreight.freight_cost),
-        sellerFreightCost: Number(existingFreight.seller_freight_cost),
-        freightMethod: `${existingFreight.freight_method} (Histórico)`
-      };
+      return result;
     }
 
     setLoadingFreight(prev => ({ ...prev, [productId]: true }));
@@ -226,16 +244,21 @@ export const useFreightCalculation = () => {
                              reliability >= 67 ? 'Alta' : 
                              'Moderada';
 
+      const result = {
+        freightCost: finalCustomerCost,
+        sellerFreightCost: finalSellerCost,
+        freightMethod: `${consensusResult.method} (${reliability.toFixed(0)}% confiável)`
+      };
+
+      // Cache the result
+      cacheManager.set(cacheKey, result, 10 * 60 * 1000); // 10 minutes
+
       toast({
         title: "✅ Frete calculado com consenso!",
         description: `${consensusResult.method}: Cliente R$ ${finalCustomerCost.toFixed(2)} | Vendedor R$ ${finalSellerCost.toFixed(2)} (Confiabilidade: ${reliabilityText})`,
       });
 
-      return {
-        freightCost: finalCustomerCost,
-        sellerFreightCost: finalSellerCost,
-        freightMethod: `${consensusResult.method} (${reliability.toFixed(0)}% confiável)`
-      };
+      return result;
 
     } catch (error: any) {
       console.error('💥 ERRO NO CÁLCULO COM CONSENSO:', error);
@@ -249,7 +272,7 @@ export const useFreightCalculation = () => {
     } finally {
       setLoadingFreight(prev => ({ ...prev, [productId]: false }));
     }
-  };
+  }, [makeFreightCall, findConsensusValue, saveFreightHistory, getCurrentFreight]);
 
   return {
     loadingFreight,

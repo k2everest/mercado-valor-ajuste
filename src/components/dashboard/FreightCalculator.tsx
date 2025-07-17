@@ -51,8 +51,12 @@ export const FreightCalculator = ({
 
   const calculateFreight = async (productId: string) => {
     const result = await fetchFreightCosts(productId, zipCode);
-    if (result) {
-      onFreightCalculated(productId, result);
+    if (result && typeof result === 'object' && 'freightCost' in result) {
+      onFreightCalculated(productId, {
+        freightCost: result.freightCost,
+        sellerFreightCost: result.sellerFreightCost,
+        freightMethod: result.freightMethod
+      });
     }
   };
 
