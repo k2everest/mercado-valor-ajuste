@@ -101,7 +101,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
   
   const loadProductsWithRetry = useCallback(async (limit: number = 50, offset: number = 0) => {
     try {
-      const accessToken = await getValidMLToken();
+      let accessToken = await getValidMLToken();
       if (!accessToken) {
         throw new Error('Token de acesso não disponível. Reconecte-se ao Mercado Livre.');
       }
@@ -113,20 +113,28 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
       });
 
       if (error) {
-        // If it's an auth error, try refreshing token once more
-        if (error.message?.includes('unauthorized') || error.message?.includes('invalid access token')) {
-          console.log('🔄 Token inválido, tentando renovar...');
-          const newToken = await getValidMLToken();
-          if (newToken) {
+        // If it's an auth error, force token refresh and retry
+        if (error.message?.includes('INVALID_TOKEN') || error.message?.includes('unauthorized') || error.message?.includes('invalid access token')) {
+          console.log('🔄 Token inválido, forçando renovação...');
+          
+          // Clear current token and force refresh
+          SecureStorage.removeSecureItem('ml_tokens');
+          
+          // Try to get fresh token
+          accessToken = await getValidMLToken();
+          if (accessToken) {
+            console.log('🔄 Tentando novamente com token renovado...');
             // Retry with new token
             const retryResponse = await supabase.functions.invoke('mercadolivre-products', {
-              body: { accessToken: newToken, limit, offset }
+              body: { accessToken, limit, offset }
             });
             
             if (retryResponse.error) {
               throw new Error(retryResponse.error.message || 'Falha ao carregar produtos após renovação do token');
             }
             return retryResponse.data;
+          } else {
+            throw new Error('Não foi possível renovar o token. Reconecte-se ao Mercado Livre.');
           }
         }
         throw new Error(error.message || 'Erro ao carregar produtos');
