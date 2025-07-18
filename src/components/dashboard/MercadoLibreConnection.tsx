@@ -322,7 +322,10 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           <CardContent className="space-y-4">
             <div className="flex gap-3">
               <Button
-                onClick={handleConnect}
+                onClick={() => {
+                  // Only reload if not already connected with products
+                  handleConnect();
+                }}
                 disabled={connecting}
                 variant="outline"
                 className="flex-1"

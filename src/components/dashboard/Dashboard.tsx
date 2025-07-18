@@ -93,6 +93,7 @@ export const Dashboard = () => {
   };
 
   const handleConnect = (newProducts: Product[], newPagination?: PaginationInfo) => {
+    console.log('🔄 Dashboard: Atualizando produtos do MercadoLibreConnection:', newProducts.length);
     setProducts(newProducts);
     setPagination(newPagination);
   };
