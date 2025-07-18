@@ -1,1 +1,4 @@
 project_id = "gbjberhxemigrnhyqwvz"
+
+[functions.mercadolivre-refresh-token]
+verify_jwt = false

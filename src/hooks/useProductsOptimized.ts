@@ -1,5 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Product } from '@/components/dashboard/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useMercadoLibreAuth } from './useMercadoLibreAuth';
+import { toast } from 'sonner';
 
 export const useProductsOptimized = (initialProducts: Product[] = []) => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -53,6 +56,50 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
     setProducts(newProducts);
   }, []);
 
+  // Auto-retry product loading with token refresh
+  const { getValidMLToken } = useMercadoLibreAuth();
+  
+  const loadProductsWithRetry = useCallback(async (limit: number = 50, offset: number = 0) => {
+    try {
+      const accessToken = await getValidMLToken();
+      if (!accessToken) {
+        throw new Error('Token de acesso não disponível. Reconecte-se ao Mercado Livre.');
+      }
+
+      console.log(`🔄 Carregando produtos... (limit: ${limit}, offset: ${offset})`);
+
+      const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
+        body: { accessToken, limit, offset }
+      });
+
+      if (error) {
+        // If it's an auth error, try refreshing token once more
+        if (error.message?.includes('unauthorized') || error.message?.includes('invalid access token')) {
+          console.log('🔄 Token inválido, tentando renovar...');
+          const newToken = await getValidMLToken();
+          if (newToken) {
+            // Retry with new token
+            const retryResponse = await supabase.functions.invoke('mercadolivre-products', {
+              body: { accessToken: newToken, limit, offset }
+            });
+            
+            if (retryResponse.error) {
+              throw new Error(retryResponse.error.message || 'Falha ao carregar produtos após renovação do token');
+            }
+            return retryResponse.data;
+          }
+        }
+        throw new Error(error.message || 'Erro ao carregar produtos');
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('💥 Erro ao carregar produtos:', error);
+      toast.error(`Erro ao carregar produtos: ${error.message}`);
+      throw error;
+    }
+  }, [getValidMLToken]);
+
   return {
     products,
     productMap,
@@ -63,6 +110,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
     updateMultipleProducts,
     addProducts,
     replaceProducts,
-    setProducts
+    setProducts,
+    loadProductsWithRetry
   };
 };

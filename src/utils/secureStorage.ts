@@ -1,4 +1,4 @@
-// Secure token storage utilities
+// Secure token storage utilities with auto-refresh for Mercado Livre
 export class SecureStorage {
   private static encrypt(value: string): string {
     // Simple obfuscation - in production, use proper encryption
@@ -11,6 +11,33 @@ export class SecureStorage {
     } catch {
       return '';
     }
+  }
+
+  // Mercado Livre token management
+  static setMLTokens(accessToken: string, refreshToken: string, expiresIn: number): void {
+    const tokenData = {
+      accessToken,
+      refreshToken,
+      expiresAt: Date.now() + (expiresIn * 1000) - 60000 // Subtract 1 minute for safety
+    };
+    this.setSecureItem('ml_tokens', JSON.stringify(tokenData));
+  }
+
+  static getMLTokens(): { accessToken: string; refreshToken: string; expiresAt: number } | null {
+    const tokenStr = this.getSecureItem('ml_tokens');
+    if (!tokenStr) return null;
+    
+    try {
+      return JSON.parse(tokenStr);
+    } catch {
+      return null;
+    }
+  }
+
+  static isMLTokenExpired(): boolean {
+    const tokens = this.getMLTokens();
+    if (!tokens) return true;
+    return Date.now() >= tokens.expiresAt;
   }
 
   static setSecureItem(key: string, value: string): void {
