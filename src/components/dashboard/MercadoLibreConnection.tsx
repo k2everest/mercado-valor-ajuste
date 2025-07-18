@@ -22,14 +22,13 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
   // Rate limiter for API calls
   const rateLimiter = InputValidator.createRateLimiter(10, 60000); // 10 requests per minute
 
-  const isConnected = !!SecureStorage.getSecureItem('ml_access_token');
+  const isConnected = !!SecureStorage.getMLTokens();
 
   const handleDisconnect = () => {
     setDisconnecting(true);
     
     try {
-      SecureStorage.removeSecureItem('ml_access_token');
-      SecureStorage.removeSecureItem('ml_token_timestamp');
+      SecureStorage.removeSecureItem('ml_tokens');
       SecureStorage.removeSecureItem('ml_oauth_state');
       
       toast({
@@ -100,8 +99,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           error.message?.includes('invalid access token')) {
         
         console.log('🗑️ Token inválido, removendo...');
-        SecureStorage.removeSecureItem('ml_access_token');
-        SecureStorage.removeSecureItem('ml_token_timestamp');
+        SecureStorage.removeSecureItem('ml_tokens');
         onConnectionChange(false);
         onConnect([]);
         
@@ -147,12 +145,12 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       }
       
       // Verificar se já existe um token válido
-      const storedToken = SecureStorage.getSecureItem('ml_access_token');
-      if (storedToken) {
-        console.log('🔑 Token encontrado, testando e carregando produtos...');
+      const tokens = SecureStorage.getMLTokens();
+      if (tokens && !SecureStorage.isMLTokenExpired()) {
+        console.log('🔑 Token válido encontrado, carregando produtos...');
         
         try {
-          const success = await loadProducts(storedToken);
+          const success = await loadProducts(tokens.accessToken);
           if (success) {
             console.log('✅ Reconexão bem-sucedida');
             onConnectionChange(true);
@@ -231,8 +229,11 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             }
 
             console.log('🔑 Token obtido, salvando e carregando produtos...');
-            SecureStorage.setSecureItem('ml_access_token', tokenData.access_token);
-            SecureStorage.setSecureItem('ml_token_timestamp', Date.now().toString());
+            SecureStorage.setMLTokens(
+              tokenData.access_token,
+              tokenData.refresh_token || '',
+              tokenData.expires_in || 21600
+            );
             
             // Carregar produtos com o novo token
             const success = await loadProducts(tokenData.access_token);
