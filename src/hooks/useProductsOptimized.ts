@@ -103,8 +103,9 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
     try {
       const accessToken = await getValidMLToken();
       if (!accessToken) {
-        toast.error('Conecte-se ao Mercado Livre para carregar produtos');
-        throw new Error('Token de acesso não disponível. Conecte-se ao Mercado Livre na aba Conexões.');
+        const message = 'Para carregar produtos, você precisa se conectar ao Mercado Livre primeiro na aba "Conexões"';
+        toast.error(message);
+        throw new Error(message);
       }
 
       console.log(`🔄 Carregando produtos... (limit: ${limit}, offset: ${offset})`);
