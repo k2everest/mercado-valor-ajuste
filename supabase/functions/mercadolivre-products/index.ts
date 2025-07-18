@@ -179,10 +179,10 @@ serve(async (req) => {
       }
 
       // Split into batches and process in parallel
-      const batchSize = 30
+      const processingBatchSize = 30
       const batches = []
-      for (let i = 0; i < allItemIds.length; i += batchSize) {
-        batches.push(allItemIds.slice(i, i + batchSize))
+      for (let i = 0; i < allItemIds.length; i += processingBatchSize) {
+        batches.push(allItemIds.slice(i, i + processingBatchSize))
       }
       
       console.log(`🚀 Processando ${allItemIds.length} produtos em ${batches.length} lotes paralelos...`)
@@ -220,8 +220,8 @@ serve(async (req) => {
 
     // Standard pagination flow with improved batch size
     console.log('📄 Buscando produtos com paginação...')
-    const batchSize = Math.min(limit, 50) // Ensure we don't exceed ML API limits
-    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=${batchSize}&offset=${offset}`, {
+    const paginationBatchSize = Math.min(limit, 50) // Ensure we don't exceed ML API limits
+    const itemsResponse = await fetch(`https://api.mercadolibre.com/users/${userId}/items/search?status=active&limit=${paginationBatchSize}&offset=${offset}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
@@ -308,10 +308,10 @@ serve(async (req) => {
     }
 
     // Process in parallel batches of 20 for better performance
-    const batchSize2 = 20
+    const detailsBatchSize = 20
     const batches = []
-    for (let i = 0; i < itemsToProcess.length; i += batchSize2) {
-      batches.push(itemsToProcess.slice(i, i + batchSize2))
+    for (let i = 0; i < itemsToProcess.length; i += detailsBatchSize) {
+      batches.push(itemsToProcess.slice(i, i + detailsBatchSize))
     }
     
     // Process all batches in parallel for much faster execution
