@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { SecureStorage } from "@/utils/secureStorage";
 import { ProductsPagination } from "./ProductsPagination";
 import { FreightCalculator } from "./FreightCalculator";
 import { ProductActions } from "./ProductActions";
@@ -34,14 +35,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     
     setLoadingMore(true);
     try {
-      const accessToken = localStorage.getItem('ml_access_token');
-      if (!accessToken) {
-        throw new Error('Token de acesso não encontrado');
+      const tokens = SecureStorage.getMLTokens();
+      if (!tokens || SecureStorage.isMLTokenExpired()) {
+        throw new Error('Token de acesso não encontrado ou expirado. Conecte-se novamente ao Mercado Livre.');
       }
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
         body: { 
-          accessToken,
+          accessToken: tokens.accessToken,
           limit,
           offset: products.length
         }
@@ -82,14 +83,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     
     setLoadingMore(true);
     try {
-      const accessToken = localStorage.getItem('ml_access_token');
-      if (!accessToken) {
-        throw new Error('Token de acesso não encontrado');
+      const tokens = SecureStorage.getMLTokens();
+      if (!tokens || SecureStorage.isMLTokenExpired()) {
+        throw new Error('Token de acesso não encontrado ou expirado. Conecte-se novamente ao Mercado Livre.');
       }
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
         body: { 
-          accessToken,
+          accessToken: tokens.accessToken,
           limit: -1,
           offset: 0
         }
