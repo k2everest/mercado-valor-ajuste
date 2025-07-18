@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Product } from '@/components/dashboard/types';
 import { supabase } from '@/integrations/supabase/client';
-import { useMercadoLibreAuth } from './useMercadoLibreAuth';
+import { SecureStorage } from '@/utils/secureStorage';
 import { toast } from 'sonner';
 
 export const useProductsOptimized = (initialProducts: Product[] = []) => {
@@ -57,7 +57,47 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
   }, []);
 
   // Auto-retry product loading with token refresh
-  const { getValidMLToken } = useMercadoLibreAuth();
+  const getValidMLToken = useCallback(async (): Promise<string | null> => {
+    const tokens = SecureStorage.getMLTokens();
+    
+    if (!tokens) {
+      console.log('❌ Nenhum token encontrado');
+      return null;
+    }
+
+    // Check if token is expired
+    if (SecureStorage.isMLTokenExpired()) {
+      console.log('⏰ Token expirado, tentando renovar...');
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('mercadolivre-refresh-token', {
+          body: { refreshToken: tokens.refreshToken }
+        });
+
+        if (error) {
+          console.error('❌ Erro ao renovar token:', error);
+          SecureStorage.removeSecureItem('ml_tokens');
+          return null;
+        }
+
+        // Save new tokens
+        SecureStorage.setMLTokens(
+          data.accessToken,
+          data.refreshToken || tokens.refreshToken,
+          data.expiresIn || 21600
+        );
+
+        console.log('✅ Token renovado com sucesso');
+        return data.accessToken;
+      } catch (error: any) {
+        console.error('💥 Erro ao renovar token:', error);
+        SecureStorage.removeSecureItem('ml_tokens');
+        return null;
+      }
+    }
+
+    return tokens.accessToken;
+  }, []);
   
   const loadProductsWithRetry = useCallback(async (limit: number = 50, offset: number = 0) => {
     try {
