@@ -56,7 +56,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
     setProducts(newProducts);
   }, []);
 
-  // Auto-retry product loading with token refresh
+  // Simplified token validation
   const getValidMLToken = useCallback(async (): Promise<string | null> => {
     const tokens = SecureStorage.getMLTokens();
     
@@ -65,7 +65,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
       return null;
     }
 
-    // Check if token is expired
+    // If token is expired, try to refresh once
     if (SecureStorage.isMLTokenExpired()) {
       console.log('⏰ Token expirado, tentando renovar...');
       
@@ -74,8 +74,8 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
           body: { refreshToken: tokens.refreshToken }
         });
 
-        if (error) {
-          console.error('❌ Erro ao renovar token:', error);
+        if (error || !data?.accessToken) {
+          console.error('❌ Falha ao renovar token:', error);
           SecureStorage.removeSecureItem('ml_tokens');
           return null;
         }
@@ -101,9 +101,10 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
   
   const loadProductsWithRetry = useCallback(async (limit: number = 50, offset: number = 0) => {
     try {
-      let accessToken = await getValidMLToken();
+      const accessToken = await getValidMLToken();
       if (!accessToken) {
-        throw new Error('Token de acesso não disponível. Reconecte-se ao Mercado Livre.');
+        toast.error('Conecte-se ao Mercado Livre para carregar produtos');
+        throw new Error('Token de acesso não disponível. Conecte-se ao Mercado Livre na aba Conexões.');
       }
 
       console.log(`🔄 Carregando produtos... (limit: ${limit}, offset: ${offset})`);
@@ -113,29 +114,14 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
       });
 
       if (error) {
-        // If it's an auth error, force token refresh and retry
-        if (error.message?.includes('INVALID_TOKEN') || error.message?.includes('unauthorized') || error.message?.includes('invalid access token')) {
-          console.log('🔄 Token inválido, forçando renovação...');
-          
-          // Clear current token and force refresh
+        // If it's an auth error, clear tokens and ask user to reconnect
+        if (error.message?.includes('INVALID_TOKEN') || 
+            error.message?.includes('unauthorized') || 
+            error.message?.includes('invalid access token')) {
+          console.log('🔄 Token inválido, removendo tokens armazenados...');
           SecureStorage.removeSecureItem('ml_tokens');
-          
-          // Try to get fresh token
-          accessToken = await getValidMLToken();
-          if (accessToken) {
-            console.log('🔄 Tentando novamente com token renovado...');
-            // Retry with new token
-            const retryResponse = await supabase.functions.invoke('mercadolivre-products', {
-              body: { accessToken, limit, offset }
-            });
-            
-            if (retryResponse.error) {
-              throw new Error(retryResponse.error.message || 'Falha ao carregar produtos após renovação do token');
-            }
-            return retryResponse.data;
-          } else {
-            throw new Error('Não foi possível renovar o token. Reconecte-se ao Mercado Livre.');
-          }
+          toast.error('Sessão expirada. Reconecte-se ao Mercado Livre.');
+          throw new Error('Sessão expirada. Reconecte-se ao Mercado Livre na aba Conexões.');
         }
         throw new Error(error.message || 'Erro ao carregar produtos');
       }
@@ -143,7 +129,9 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
       return data;
     } catch (error: any) {
       console.error('💥 Erro ao carregar produtos:', error);
-      toast.error(`Erro ao carregar produtos: ${error.message}`);
+      if (!error.message.includes('Conecte-se') && !error.message.includes('Reconecte-se')) {
+        toast.error(`Erro ao carregar produtos: ${error.message}`);
+      }
       throw error;
     }
   }, [getValidMLToken]);
