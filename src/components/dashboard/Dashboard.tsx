@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useFreightPersistence } from "@/hooks/useFreightPersistence";
+import { SecureStorage } from "@/utils/secureStorage";
 import { MercadoLibreConnection } from "./MercadoLibreConnection";
 import { ProductsList } from "./ProductsList";
 import { FreightCalculator } from "./FreightCalculator";
@@ -32,8 +33,8 @@ export const Dashboard = () => {
 
   // Verificar conexão ML e carregar dados persistidos
   useEffect(() => {
-    const token = localStorage.getItem('ml_access_token');
-    const hasMLConnection = !!token;
+    const tokens = SecureStorage.getMLTokens();
+    const hasMLConnection = !!(tokens && !SecureStorage.isMLTokenExpired());
     
     console.log('🔍 Verificando conexão ML:', { hasMLConnection });
     setHasConnection(hasMLConnection);
