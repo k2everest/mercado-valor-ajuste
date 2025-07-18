@@ -19,7 +19,10 @@ export const useFreightPersistence = () => {
 
   // Carregar últimos cálculos do usuário
   const loadLastCalculations = async (): Promise<Product[]> => {
-    if (!user) return [];
+    if (!user) {
+      console.log('❌ Usuário não autenticado, não carregando cálculos');
+      return [];
+    }
     
     setIsLoading(true);
     try {
