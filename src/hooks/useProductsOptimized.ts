@@ -58,7 +58,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
 
   // Simplified token validation
   const getValidMLToken = useCallback(async (): Promise<string | null> => {
-    const tokens = SecureStorage.getMLTokens();
+    const tokens = await SecureStorage.getMLTokens();
     
     if (!tokens) {
       console.log('❌ Nenhum token encontrado');
@@ -66,7 +66,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
     }
 
     // If token is expired, try to refresh once
-    if (SecureStorage.isMLTokenExpired()) {
+    if (await SecureStorage.isMLTokenExpired()) {
       console.log('⏰ Token expirado, tentando renovar...');
       
       try {
@@ -81,7 +81,7 @@ export const useProductsOptimized = (initialProducts: Product[] = []) => {
         }
 
         // Save new tokens
-        SecureStorage.setMLTokens(
+        await SecureStorage.setMLTokens(
           data.accessToken,
           data.refreshToken || tokens.refreshToken,
           data.expiresIn || 21600

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -22,7 +22,17 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
   // Rate limiter for API calls
   const rateLimiter = InputValidator.createRateLimiter(10, 60000); // 10 requests per minute
 
-  const isConnected = !!SecureStorage.getMLTokens();
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Check connection status on mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      const tokens = await SecureStorage.getMLTokens();
+      const connected = !!(tokens && !(await SecureStorage.isMLTokenExpired()));
+      setIsConnected(connected);
+    };
+    checkConnection();
+  }, []);
 
   const handleDisconnect = () => {
     setDisconnecting(true);
@@ -145,8 +155,8 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       }
       
       // Verificar se já existe um token válido
-      const tokens = SecureStorage.getMLTokens();
-      if (tokens && !SecureStorage.isMLTokenExpired()) {
+      const tokens = await SecureStorage.getMLTokens();
+      if (tokens && !(await SecureStorage.isMLTokenExpired())) {
         console.log('🔑 Token válido encontrado, carregando produtos...');
         
         try {
@@ -169,7 +179,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       
       // Gerar estado único para OAuth
       const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      SecureStorage.setSecureItem('ml_oauth_state', state);
+      await SecureStorage.setSecureItem('ml_oauth_state', state);
 
       // Obter URL de autorização
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
@@ -208,7 +218,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
           console.log('✅ Autorização recebida com sucesso');
           
           // Validar estado
-          const savedState = SecureStorage.getSecureItem('ml_oauth_state');
+          const savedState = await SecureStorage.getSecureItem('ml_oauth_state');
           if (returnedState !== savedState) {
             throw new Error('Estado de segurança inválido. Tente novamente.');
           }
@@ -229,7 +239,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             }
 
             console.log('🔑 Token obtido, salvando e carregando produtos...');
-            SecureStorage.setMLTokens(
+            await SecureStorage.setMLTokens(
               tokenData.access_token,
               tokenData.refresh_token || '',
               tokenData.expires_in || 21600

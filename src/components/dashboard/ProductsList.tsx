@@ -35,8 +35,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     
     setLoadingMore(true);
     try {
-      const tokens = SecureStorage.getMLTokens();
-      if (!tokens || SecureStorage.isMLTokenExpired()) {
+      const tokens = await SecureStorage.getMLTokens();
+      if (!tokens || await SecureStorage.isMLTokenExpired()) {
         throw new Error('Token de acesso não encontrado ou expirado. Conecte-se novamente ao Mercado Livre.');
       }
 
@@ -83,8 +83,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     
     setLoadingMore(true);
     try {
-      const tokens = SecureStorage.getMLTokens();
-      if (!tokens || SecureStorage.isMLTokenExpired()) {
+      const tokens = await SecureStorage.getMLTokens();
+      if (!tokens || await SecureStorage.isMLTokenExpired()) {
         throw new Error('Token de acesso não encontrado ou expirado. Conecte-se novamente ao Mercado Livre.');
       }
 

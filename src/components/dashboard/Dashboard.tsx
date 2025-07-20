@@ -33,38 +33,42 @@ export const Dashboard = () => {
 
   // Verificar conexão ML e carregar dados persistidos
   useEffect(() => {
-    const tokens = SecureStorage.getMLTokens();
-    const hasMLConnection = !!(tokens && !SecureStorage.isMLTokenExpired());
-    
-    console.log('🔍 Verificando conexão ML:', { hasMLConnection });
-    setHasConnection(hasMLConnection);
-    
-    // Se não tem conexão com ML, redirecionar para home
-    if (!hasMLConnection) {
-      console.log('❌ Sem conexão ML, redirecionando para home...');
-      toast({
-        title: "🔌 Conexão necessária",
-        description: "Conecte-se ao Mercado Livre para acessar o dashboard",
-      });
-      navigate('/');
-      return;
-    }
+    const checkConnection = async () => {
+      const tokens = await SecureStorage.getMLTokens();
+      const hasMLConnection = !!(tokens && !(await SecureStorage.isMLTokenExpired()));
+      
+      console.log('🔍 Verificando conexão ML:', { hasMLConnection });
+      setHasConnection(hasMLConnection);
+      
+      // Se não tem conexão com ML, redirecionar para home
+      if (!hasMLConnection) {
+        console.log('❌ Sem conexão ML, redirecionando para home...');
+        toast({
+          title: "🔌 Conexão necessária",
+          description: "Conecte-se ao Mercado Livre para acessar o dashboard",
+        });
+        navigate('/');
+        return;
+      }
 
-    // Carregar últimos cálculos se autenticado
-    if (user && hasMLConnection) {
-      loadLastCalculations().then(savedProducts => {
-        if (savedProducts.length > 0) {
-          console.log('📋 Carregando cálculos salvos:', savedProducts.length);
-          setProducts(savedProducts);
-          setCurrentZipCode(lastZipCode);
-          
-          toast({
-            title: "📋 Cálculos restaurados",
-            description: `${savedProducts.length} produtos com cálculos anteriores carregados`,
-          });
-        }
-      });
-    }
+      // Carregar últimos cálculos se autenticado
+      if (user && hasMLConnection) {
+        loadLastCalculations().then(savedProducts => {
+          if (savedProducts.length > 0) {
+            console.log('📋 Carregando cálculos salvos:', savedProducts.length);
+            setProducts(savedProducts);
+            setCurrentZipCode(lastZipCode);
+            
+            toast({
+              title: "📋 Cálculos restaurados",
+              description: `${savedProducts.length} produtos com cálculos anteriores carregados`,
+            });
+          }
+        });
+      }
+    };
+    
+    checkConnection();
   }, [user, navigate, loadLastCalculations, lastZipCode]);
 
   // Salvar cálculos automaticamente quando produtos ou CEP mudam
