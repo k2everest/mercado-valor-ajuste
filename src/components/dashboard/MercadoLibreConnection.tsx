@@ -330,10 +330,17 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="bg-green-50 p-4 rounded-lg mb-4">
+              <p className="text-green-800 text-center">
+                ✅ Conexão ativa com o Mercado Livre
+                <br />
+                <span className="text-sm">Acesse a aba "Produtos" para ver e gerenciar seus itens</span>
+              </p>
+            </div>
+            
             <div className="flex gap-3">
               <Button
                 onClick={() => {
-                  // Only reload if not already connected with products
                   handleConnect();
                 }}
                 disabled={connecting}
@@ -343,7 +350,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
                 {connecting ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Carregando produtos...
+                    Recarregando...
                   </>
                 ) : (
                   <>
