@@ -231,16 +231,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         onAdjustAllPrices={adjustAllPrices}
       />
 
-      {/* Pagination Controls - Show at top when there are more products to load */}
-      {pagination && pagination.hasMore && onLoadMore && (
-        <ProductsPagination
-          pagination={pagination}
-          onLoadMore={loadMoreProducts}
-          onLoadAll={loadAllProducts}
-          loading={loadingMore}
-          currentProductsCount={products.length}
-        />
-      )}
 
       {/* Products Grid */}
       <div className="grid gap-4">
