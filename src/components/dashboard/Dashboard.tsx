@@ -97,9 +97,8 @@ export const Dashboard = () => {
   };
 
   const handleConnect = (newProducts: Product[], newPagination?: PaginationInfo) => {
-    console.log('🔄 Dashboard: Atualizando produtos do MercadoLibreConnection:', newProducts.length);
-    setProducts(newProducts);
-    setPagination(newPagination);
+    console.log('🔄 Dashboard: Conexão estabelecida, ProductsList irá carregar produtos automaticamente');
+    // Don't load products here - let ProductsList handle it in the Products tab
   };
 
   const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
