@@ -157,22 +157,15 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       // Verificar se já existe um token válido
       const tokens = await SecureStorage.getMLTokens();
       if (tokens && !(await SecureStorage.isMLTokenExpired())) {
-        console.log('🔑 Token válido encontrado, carregando produtos...');
-        
-        try {
-          const success = await loadProducts(tokens.accessToken);
-          if (success) {
-            console.log('✅ Reconexão bem-sucedida');
-            onConnectionChange(true);
-            toast({
-              title: "✅ Reconectado com sucesso!",
-              description: "Produtos carregados do Mercado Livre",
-            });
-            return;
-          }
-        } catch (error) {
-          console.log('⚠️ Token existente inválido, iniciando nova autenticação...');
-        }
+        console.log('🔑 Token válido encontrado!');
+        onConnectionChange(true);
+        setIsConnected(true);
+        toast({
+          title: "✅ Reconectado com sucesso!",
+          description: "Acesse a aba 'Produtos' para ver seus itens",
+        });
+        setConnecting(false);
+        return;
       }
       
       console.log('🔗 Iniciando nova autenticação OAuth...');
@@ -245,15 +238,13 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
               tokenData.expires_in || 21600
             );
             
-            // Carregar produtos com o novo token
-            const success = await loadProducts(tokenData.access_token);
-            if (success) {
-              onConnectionChange(true);
-              toast({
-                title: "✅ Conectado com sucesso!",
-                description: "Produtos importados do Mercado Livre",
-              });
-            }
+            // Conectado com sucesso
+            onConnectionChange(true);
+            setIsConnected(true);
+            toast({
+              title: "✅ Conectado com sucesso!",
+              description: "Acesse a aba 'Produtos' para ver seus itens do Mercado Livre",
+            });
             
           } catch (error: any) {
             console.error('❌ Erro no processamento da autorização:', error);
@@ -341,23 +332,16 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             <div className="flex gap-3">
               <Button
                 onClick={() => {
-                  handleConnect();
+                  toast({
+                    title: "ℹ️ Como recarregar produtos",
+                    description: "Acesse a aba 'Produtos' para carregar e gerenciar seus itens do Mercado Livre",
+                  });
                 }}
-                disabled={connecting}
                 variant="outline"
                 className="flex-1"
               >
-                {connecting ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Recarregando...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Recarregar produtos
-                  </>
-                )}
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Ver produtos
               </Button>
               
               <Button

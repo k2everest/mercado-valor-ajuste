@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(false);
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -24,6 +25,52 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     paginationTotal: pagination?.total,
     showPagination: !!(pagination && pagination.hasMore && onLoadMore)
   });
+
+  // Load products if none are provided initially
+  useEffect(() => {
+    const loadInitialProducts = async () => {
+      if (products.length === 0 && !initialLoad) {
+        console.log('🔄 ProductsList: Loading initial products...');
+        setInitialLoad(true);
+        
+        try {
+          const tokens = await SecureStorage.getMLTokens();
+          if (!tokens || await SecureStorage.isMLTokenExpired()) {
+            throw new Error('Token de acesso não encontrado ou expirado. Conecte-se novamente ao Mercado Livre.');
+          }
+
+          const { data, error } = await supabase.functions.invoke('mercadolivre-products', {
+            body: { 
+              accessToken: tokens.accessToken,
+              limit: 50,
+              offset: 0
+            }
+          });
+
+          if (error) throw error;
+
+          console.log('✅ ProductsList: Initial products loaded:', data.products.length);
+          setProducts(data.products);
+          onLoadMore?.(data.products, data.pagination);
+
+          toast({
+            title: "📦 Produtos carregados!",
+            description: `${data.products.length} produtos importados do Mercado Livre`,
+          });
+
+        } catch (error: any) {
+          console.error('❌ Error loading initial products:', error);
+          toast({
+            title: "❌ Erro ao carregar produtos",
+            description: error.message,
+            variant: "destructive"
+          });
+        }
+      }
+    };
+
+    loadInitialProducts();
+  }, [products.length, initialLoad, onLoadMore]);
 
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
