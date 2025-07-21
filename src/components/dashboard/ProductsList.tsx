@@ -51,7 +51,6 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
           console.log('✅ ProductsList: Initial products loaded:', data.products.length);
           setProducts(data.products);
-          onLoadMore?.(data.products, data.pagination);
 
           toast({
             title: "📦 Produtos carregados!",
