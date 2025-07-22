@@ -28,12 +28,12 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   // Load products if none are provided initially
   useEffect(() => {
-    const loadInitialProducts = async () => {
-      // Prevent duplicate calls using ref
-      if (products.length === 0 && !isLoadingRef.current) {
-        console.log('🔄 ProductsList: Loading initial products...');
-        isLoadingRef.current = true;
-        
+    // Only load if we don't have products and aren't already loading
+    if (products.length === 0 && !isLoadingRef.current) {
+      console.log('🔄 ProductsList: Loading initial products...');
+      isLoadingRef.current = true;
+      
+      const loadInitialProducts = async () => {
         try {
           const tokens = await SecureStorage.getMLTokens();
           if (!tokens || await SecureStorage.isMLTokenExpired()) {
@@ -66,16 +66,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             variant: "destructive"
           });
         } finally {
-          // Reset loading flag after a delay to allow for cleanup
-          setTimeout(() => {
-            isLoadingRef.current = false;
-          }, 1000);
+          // Reset loading flag after operation completes
+          isLoadingRef.current = false;
         }
-      }
-    };
+      };
 
-    loadInitialProducts();
-  }, [products.length]);
+      loadInitialProducts();
+    }
+  }, []); // Remove products.length dependency to prevent re-runs
 
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
