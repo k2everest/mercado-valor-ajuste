@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +15,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(false);
+  const isLoadingRef = useRef(false);
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -29,9 +29,10 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   // Load products if none are provided initially
   useEffect(() => {
     const loadInitialProducts = async () => {
-      if (products.length === 0 && !initialLoad) {
+      // Prevent duplicate calls using ref
+      if (products.length === 0 && !isLoadingRef.current) {
         console.log('🔄 ProductsList: Loading initial products...');
-        setInitialLoad(true);
+        isLoadingRef.current = true;
         
         try {
           const tokens = await SecureStorage.getMLTokens();
@@ -64,12 +65,17 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             description: error.message,
             variant: "destructive"
           });
+        } finally {
+          // Reset loading flag after a delay to allow for cleanup
+          setTimeout(() => {
+            isLoadingRef.current = false;
+          }, 1000);
         }
       }
     };
 
     loadInitialProducts();
-  }, [products.length, initialLoad, onLoadMore]);
+  }, [products.length]);
 
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
