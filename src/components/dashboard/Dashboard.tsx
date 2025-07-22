@@ -182,12 +182,12 @@ export const Dashboard = () => {
             />
           </TabsContent>
 
-          <TabsContent value="products">
+           <TabsContent value="products">
             {hasConnection ? (
               <ProductsList 
-                products={products}
-                pagination={pagination}
-                onLoadMore={handleLoadMore}
+                products={[]}
+                pagination={undefined}
+                onLoadMore={() => {}}
               />
             ) : (
               <Card>
