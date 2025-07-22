@@ -20,8 +20,6 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [hasConnection, setHasConnection] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo | undefined>();
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [currentZipCode, setCurrentZipCode] = useState('');
   const { 
@@ -51,76 +49,27 @@ export const Dashboard = () => {
         return;
       }
 
-      // Carregar últimos cálculos se autenticado
-      if (user && hasMLConnection) {
-        loadLastCalculations().then(savedProducts => {
-          if (savedProducts.length > 0) {
-            console.log('📋 Carregando cálculos salvos:', savedProducts.length);
-            setProducts(savedProducts);
-            setCurrentZipCode(lastZipCode);
-            
-            toast({
-              title: "📋 Cálculos restaurados",
-              description: `${savedProducts.length} produtos com cálculos anteriores carregados`,
-            });
-          }
-        });
+      // Carregar último CEP usado
+      if (user && hasMLConnection && lastZipCode) {
+        setCurrentZipCode(lastZipCode);
       }
     };
     
     checkConnection();
   }, [user, navigate, loadLastCalculations, lastZipCode]);
 
-  // Salvar cálculos automaticamente quando produtos ou CEP mudam
-  useEffect(() => {
-    if (user && currentZipCode && products.length > 0) {
-      const calculatedProducts = products.filter(p => 
-        p.freightCost !== undefined && p.sellerFreightCost !== undefined
-      );
-      
-      if (calculatedProducts.length > 0) {
-        console.log('💾 Salvando cálculos automaticamente...');
-        saveCalculations(products, currentZipCode);
-      }
-    }
-  }, [products, currentZipCode, user, saveCalculations]);
 
   const handleConnectionChange = (connected: boolean) => {
     setHasConnection(connected);
     if (!connected) {
-      setProducts([]);
-      setPagination(undefined);
       // Redirecionar para home quando desconectado
       console.log('🔌 Desconectado do ML, redirecionando...');
       navigate('/');
     }
   };
 
-  const handleConnect = (newProducts: Product[], newPagination?: PaginationInfo) => {
-    console.log('🔄 Dashboard: Conexão estabelecida, ProductsList irá carregar produtos automaticamente');
-    // Don't load products here - let ProductsList handle it in the Products tab
-  };
-
-  const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
-    setProducts(newProducts);
-    setPagination(newPagination);
-  };
-
-  const handleFreightCalculated = (productId: string, freightData: {
-    freightCost: number;
-    sellerFreightCost: number;
-    freightMethod: string;
-  }) => {
-    setProducts(prev => prev.map(product => {
-      if (product.id === productId) {
-        return {
-          ...product,
-          ...freightData,
-          adjustedPrice: undefined
-        };
-      }
-      return product;
-    }));
+  const handleConnect = () => {
+    console.log('🔄 Dashboard: Conexão estabelecida');
   };
 
   const handleZipCodeChange = (zipCode: string) => {
@@ -202,14 +151,14 @@ export const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="calculator">
-            <FreightCalculator 
-              products={products}
-              onFreightCalculated={handleFreightCalculated}
-              loadingFreight={loadingFreight}
-              setLoadingFreight={setLoadingFreight}
-              initialZipCode={lastZipCode}
-              onZipCodeChange={handleZipCodeChange}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>Calculadora de Frete</CardTitle>
+                <CardDescription>
+                  Use a aba "Produtos" para acessar a calculadora integrada
+                </CardDescription>
+              </CardHeader>
+            </Card>
           </TabsContent>
 
           <TabsContent value="test">
