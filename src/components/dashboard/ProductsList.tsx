@@ -104,6 +104,11 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           cache.setProducts(data.products);
           setProducts(data.products);
 
+          // Update parent component with pagination data
+          if (onLoadMore && data.pagination) {
+            onLoadMore(data.products, data.pagination);
+          }
+
           toast({
             title: "📦 Produtos carregados!",
             description: `${data.products.length} produtos importados do Mercado Livre`,
