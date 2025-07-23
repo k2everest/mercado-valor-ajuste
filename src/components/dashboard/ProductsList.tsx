@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SecureStorage } from "@/utils/secureStorage";
@@ -8,7 +9,7 @@ import { ProductsPagination } from "./ProductsPagination";
 import { FreightCalculator } from "./FreightCalculator";
 import { ProductActions } from "./ProductActions";
 import { ProductCard } from "./ProductCard";
-import { Package } from "lucide-react";
+import { Package, Truck, X } from "lucide-react";
 import { Product, ProductsListProps } from './types';
 
 // Cache manager for products to prevent duplicate loading
@@ -57,6 +58,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
+  const [shippingFilter, setShippingFilter] = useState<'all' | 'free' | 'paid'>('all');
   const cache = ProductsCache.getInstance();
 
   console.log('ProductsList rendered with:', {
@@ -336,10 +338,43 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         onAdjustAllPrices={adjustAllPrices}
       />
 
+      {/* Shipping Filter Buttons */}
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          variant={shippingFilter === 'all' ? 'default' : 'outline'}
+          onClick={() => setShippingFilter('all')}
+          size="sm"
+        >
+          <Package className="w-4 h-4 mr-2" />
+          Todos os produtos
+        </Button>
+        <Button
+          variant={shippingFilter === 'free' ? 'default' : 'outline'}
+          onClick={() => setShippingFilter('free')}
+          size="sm"
+        >
+          <Truck className="w-4 h-4 mr-2" />
+          Com frete grátis
+        </Button>
+        <Button
+          variant={shippingFilter === 'paid' ? 'default' : 'outline'}
+          onClick={() => setShippingFilter('paid')}
+          size="sm"
+        >
+          <X className="w-4 h-4 mr-2" />
+          Sem frete grátis
+        </Button>
+      </div>
 
       {/* Products Grid */}
       <div className="grid gap-4">
-        {products.map((product) => (
+        {products
+          .filter(product => {
+            if (shippingFilter === 'free') return product.freeShipping;
+            if (shippingFilter === 'paid') return !product.freeShipping;
+            return true;
+          })
+          .map((product) => (
           <ProductCard
             key={product.id}
             product={product}
