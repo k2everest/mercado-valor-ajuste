@@ -11,15 +11,53 @@ import { ProductCard } from "./ProductCard";
 import { Package } from "lucide-react";
 import { Product, ProductsListProps } from './types';
 
-// Global singleton to prevent duplicate loading
-let isLoadingGlobal = false;
-let loadedProducts: Product[] = [];
+// Cache manager for products to prevent duplicate loading
+class ProductsCache {
+  private static instance: ProductsCache;
+  private products: Product[] = [];
+  private isLoading: boolean = false;
+  private hasLoaded: boolean = false;
+
+  static getInstance(): ProductsCache {
+    if (!ProductsCache.instance) {
+      ProductsCache.instance = new ProductsCache();
+    }
+    return ProductsCache.instance;
+  }
+
+  getProducts(): Product[] {
+    return this.products;
+  }
+
+  setProducts(products: Product[]): void {
+    this.products = products;
+    this.hasLoaded = true;
+  }
+
+  isLoadingProducts(): boolean {
+    return this.isLoading;
+  }
+
+  setLoading(loading: boolean): void {
+    this.isLoading = loading;
+  }
+
+  hasLoadedProducts(): boolean {
+    return this.hasLoaded;
+  }
+
+  clear(): void {
+    this.products = [];
+    this.isLoading = false;
+    this.hasLoaded = false;
+  }
+}
 
 export const ProductsList = ({ products: initialProducts, pagination, onLoadMore }: ProductsListProps) => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
-  const isLoadingRef = useRef(false);
+  const cache = ProductsCache.getInstance();
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -32,17 +70,18 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   // Load products if none are provided initially
   useEffect(() => {
-    // Use global cache to prevent duplicate loading
-    if (products.length === 0 && !isLoadingGlobal) {
-      // Check if we already have loaded products from a previous instance
-      if (loadedProducts.length > 0) {
-        console.log('🔄 ProductsList: Using cached products:', loadedProducts.length);
-        setProducts(loadedProducts);
+    // Use cache to prevent duplicate loading
+    if (products.length === 0 && !cache.isLoadingProducts()) {
+      // Check if we already have cached products
+      if (cache.hasLoadedProducts()) {
+        const cachedProducts = cache.getProducts();
+        console.log('🔄 ProductsList: Using cached products:', cachedProducts.length);
+        setProducts(cachedProducts);
         return;
       }
 
       console.log('🔄 ProductsList: Loading initial products...');
-      isLoadingGlobal = true;
+      cache.setLoading(true);
       
       const loadInitialProducts = async () => {
         try {
@@ -62,7 +101,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           if (error) throw error;
 
           console.log('✅ ProductsList: Initial products loaded:', data.products.length);
-          loadedProducts = data.products; // Cache globally
+          cache.setProducts(data.products);
           setProducts(data.products);
 
           toast({
@@ -78,14 +117,13 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             variant: "destructive"
           });
         } finally {
-          // Reset loading flag after operation completes
-          isLoadingGlobal = false;
+          cache.setLoading(false);
         }
       };
 
       loadInitialProducts();
     }
-  }, []); // Remove products.length dependency to prevent re-runs
+  }, []);
 
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
