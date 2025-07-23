@@ -132,11 +132,21 @@ export const Dashboard = () => {
 
            <TabsContent value="products">
             {hasConnection ? (
-              <ProductsList 
-                products={[]}
-                pagination={undefined}
-                onLoadMore={() => {}}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Produtos do Mercado Livre</CardTitle>
+                  <CardDescription>
+                    Seus produtos serão carregados automaticamente
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ProductsList 
+                    products={[]}
+                    pagination={undefined}
+                    onLoadMore={() => {}}
+                  />
+                </CardContent>
+              </Card>
             ) : (
               <Card>
                 <CardHeader>
