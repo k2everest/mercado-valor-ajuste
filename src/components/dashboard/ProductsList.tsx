@@ -11,6 +11,10 @@ import { ProductCard } from "./ProductCard";
 import { Package } from "lucide-react";
 import { Product, ProductsListProps } from './types';
 
+// Global singleton to prevent duplicate loading
+let isLoadingGlobal = false;
+let loadedProducts: Product[] = [];
+
 export const ProductsList = ({ products: initialProducts, pagination, onLoadMore }: ProductsListProps) => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
@@ -28,10 +32,17 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
   // Load products if none are provided initially
   useEffect(() => {
-    // Only load if we don't have products and aren't already loading
-    if (products.length === 0 && !isLoadingRef.current) {
+    // Use global cache to prevent duplicate loading
+    if (products.length === 0 && !isLoadingGlobal) {
+      // Check if we already have loaded products from a previous instance
+      if (loadedProducts.length > 0) {
+        console.log('🔄 ProductsList: Using cached products:', loadedProducts.length);
+        setProducts(loadedProducts);
+        return;
+      }
+
       console.log('🔄 ProductsList: Loading initial products...');
-      isLoadingRef.current = true;
+      isLoadingGlobal = true;
       
       const loadInitialProducts = async () => {
         try {
@@ -51,6 +62,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           if (error) throw error;
 
           console.log('✅ ProductsList: Initial products loaded:', data.products.length);
+          loadedProducts = data.products; // Cache globally
           setProducts(data.products);
 
           toast({
@@ -67,7 +79,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
           });
         } finally {
           // Reset loading flag after operation completes
-          isLoadingRef.current = false;
+          isLoadingGlobal = false;
         }
       };
 
