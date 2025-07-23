@@ -332,8 +332,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       />
 
 
-      {/* Products Grid */}
-      <div className="grid gap-4">
+      {/* Products List */}
+      <div className="space-y-4">
         {products.map((product) => (
           <ProductCard
             key={product.id}
