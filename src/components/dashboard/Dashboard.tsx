@@ -21,6 +21,8 @@ export const Dashboard = () => {
   const [hasConnection, setHasConnection] = useState(false);
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [currentZipCode, setCurrentZipCode] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo | undefined>(undefined);
   const { 
     lastZipCode, 
     isLoading: isLoadingCalculations, 
@@ -73,6 +75,11 @@ export const Dashboard = () => {
 
   const handleZipCodeChange = (zipCode: string) => {
     setCurrentZipCode(zipCode);
+  };
+
+  const handleLoadMore = (newProducts: Product[], newPagination: PaginationInfo) => {
+    setProducts(newProducts);
+    setPagination(newPagination);
   };
 
   return (
@@ -133,9 +140,9 @@ export const Dashboard = () => {
            <TabsContent value="products">
             {hasConnection ? (
               <ProductsList 
-                products={[]}
-                pagination={undefined}
-                onLoadMore={() => {}}
+                products={products}
+                pagination={pagination}
+                onLoadMore={handleLoadMore}
               />
             ) : (
               <Card>
