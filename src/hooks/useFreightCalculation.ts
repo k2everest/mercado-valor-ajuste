@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FreightDebugger } from '@/utils/freightDebug';
 import { useFreightPersistence } from './useFreightPersistence';
 import { cacheManager } from '@/utils/cacheManager';
+import { SecureStorage } from '@/utils/secureStorage';
 
 interface FreightCallResult {
   attempt: number;
@@ -29,9 +30,10 @@ export const useFreightCalculation = () => {
 
   const makeFreightCall = useCallback(async (productId: string, zipCode: string, attempt: number): Promise<FreightCallResult> => {
     try {
-      const accessToken = localStorage.getItem('ml_access_token');
-      if (!accessToken) {
-        throw new Error('Token de acesso não encontrado');
+      // Buscar tokens do SecureStorage ao invés de localStorage diretamente
+      const tokens = await SecureStorage.getMLTokens();
+      if (!tokens || await SecureStorage.isMLTokenExpired()) {
+        throw new Error('Token de acesso não encontrado ou expirado. Reconecte-se ao Mercado Livre.');
       }
 
       const { data, error } = await supabase.functions.invoke('mercadolivre-freight', {
@@ -39,7 +41,7 @@ export const useFreightCalculation = () => {
           action: 'getShippingCosts',
           productId,
           zipCode: zipCode.replace(/\D/g, ''),
-          accessToken
+          accessToken: tokens.accessToken
         }
       });
 

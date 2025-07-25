@@ -63,8 +63,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [autoCalculatingFreights, setAutoCalculatingFreights] = useState(false);
   const [refreshingFreights, setRefreshingFreights] = useState(false);
   
-  // CEP padrão do remetente (SP) - pode ser configurável no futuro
-  const DEFAULT_SENDER_ZIP = '01310-100'; // São Paulo - SP
+  // CEP da Rua Dr. Dolzani 677, Jardim da Glória, São Paulo - SP
+  const DEFAULT_SENDER_ZIP = '01546-000';
   
   const cache = ProductsCache.getInstance();
   const { fetchFreightCosts } = useFreightCalculation();
