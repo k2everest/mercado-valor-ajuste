@@ -9,8 +9,9 @@ import { ProductsPagination } from "./ProductsPagination";
 import { FreightCalculator } from "./FreightCalculator";
 import { ProductActions } from "./ProductActions";
 import { ProductCard } from "./ProductCard";
-import { Package, Truck, X } from "lucide-react";
+import { Package, Truck, X, RefreshCw } from "lucide-react";
 import { Product, ProductsListProps } from './types';
+import { useFreightCalculation } from "@/hooks/useFreightCalculation";
 
 // Cache manager for products to prevent duplicate loading
 class ProductsCache {
@@ -59,7 +60,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [loadingFreight, setLoadingFreight] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
   const [shippingFilter, setShippingFilter] = useState<'all' | 'free' | 'paid'>('all');
+  const [autoCalculatingFreights, setAutoCalculatingFreights] = useState(false);
+  const [refreshingFreights, setRefreshingFreights] = useState(false);
+  
+  // CEP padrão do remetente (SP) - pode ser configurável no futuro
+  const DEFAULT_SENDER_ZIP = '01310-100'; // São Paulo - SP
+  
   const cache = ProductsCache.getInstance();
+  const { fetchFreightCosts } = useFreightCalculation();
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -116,6 +124,9 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             description: `${data.products.length} produtos importados do Mercado Livre`,
           });
 
+          // Calcular fretes automaticamente com CEP padrão
+          calculateInitialFreights(data.products);
+
         } catch (error: any) {
           console.error('❌ Error loading initial products:', error);
           toast({
@@ -131,6 +142,118 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       loadInitialProducts();
     }
   }, []);
+
+  // Função para calcular fretes automaticamente na primeira carga
+  const calculateInitialFreights = async (loadedProducts: Product[]) => {
+    console.log('🚚 Iniciando cálculo automático de fretes com CEP padrão:', DEFAULT_SENDER_ZIP);
+    setAutoCalculatingFreights(true);
+    
+    try {
+      // Filtrar produtos que ainda não têm frete calculado
+      const productsWithoutFreight = loadedProducts.filter(p => !p.freightCost && !p.sellerFreightCost);
+      
+      if (productsWithoutFreight.length === 0) {
+        console.log('✅ Todos os produtos já têm frete calculado');
+        return;
+      }
+
+      toast({
+        title: "🚚 Calculando fretes automaticamente",
+        description: `Calculando frete para ${productsWithoutFreight.length} produtos com CEP padrão (${DEFAULT_SENDER_ZIP})`,
+      });
+
+      // Calcular fretes em paralelo (máximo 3 por vez para não sobrecarregar)
+      const batchSize = 3;
+      for (let i = 0; i < productsWithoutFreight.length; i += batchSize) {
+        const batch = productsWithoutFreight.slice(i, i + batchSize);
+        
+        await Promise.all(
+          batch.map(async (product) => {
+            try {
+              const result = await fetchFreightCosts(product.id, DEFAULT_SENDER_ZIP);
+              if (result) {
+                handleFreightCalculated(product.id, result);
+              }
+            } catch (error) {
+              console.error(`Erro ao calcular frete para produto ${product.id}:`, error);
+            }
+          })
+        );
+
+        // Pequeno delay entre batches
+        if (i + batchSize < productsWithoutFreight.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      toast({
+        title: "✅ Fretes calculados!",
+        description: `Fretes calculados automaticamente para produtos com CEP ${DEFAULT_SENDER_ZIP}`,
+      });
+
+    } catch (error: any) {
+      console.error('Erro no cálculo automático de fretes:', error);
+      toast({
+        title: "⚠️ Erro no cálculo automático",
+        description: "Alguns fretes podem não ter sido calculados. Use o botão atualizar.",
+        variant: "destructive"
+      });
+    } finally {
+      setAutoCalculatingFreights(false);
+    }
+  };
+
+  // Função para recalcular todos os fretes
+  const refreshAllFreights = async () => {
+    console.log('🔄 Recalculando todos os fretes...');
+    setRefreshingFreights(true);
+    
+    try {
+      toast({
+        title: "🔄 Recalculando fretes",
+        description: `Atualizando custos de frete para ${products.length} produtos`,
+      });
+
+      // Calcular fretes em paralelo (máximo 3 por vez)
+      const batchSize = 3;
+      for (let i = 0; i < products.length; i += batchSize) {
+        const batch = products.slice(i, i + batchSize);
+        
+        await Promise.all(
+          batch.map(async (product) => {
+            try {
+              const result = await fetchFreightCosts(product.id, DEFAULT_SENDER_ZIP);
+              if (result) {
+                handleFreightCalculated(product.id, result);
+              }
+            } catch (error) {
+              console.error(`Erro ao recalcular frete para produto ${product.id}:`, error);
+            }
+          })
+        );
+
+        // Pequeno delay entre batches
+        if (i + batchSize < products.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      toast({
+        title: "✅ Fretes atualizados!",
+        description: "Todos os fretes foram recalculados com sucesso",
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao recalcular fretes:', error);
+      toast({
+        title: "❌ Erro ao atualizar fretes",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setRefreshingFreights(false);
+    }
+  };
 
   const loadMoreProducts = async (limit: number) => {
     if (!pagination || !onLoadMore) {
@@ -324,12 +447,44 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         </div>
       )}
 
+      {/* Freight Info & Actions */}
+      <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-green-800 mb-1">
+                📍 Fretes calculados automaticamente
+              </h3>
+              <p className="text-sm text-green-700">
+                CEP padrão do remetente: <strong>{DEFAULT_SENDER_ZIP}</strong> (São Paulo - SP)
+                <br />
+                {autoCalculatingFreights && "🔄 Calculando fretes iniciais..."}
+                {refreshingFreights && "🔄 Atualizando todos os fretes..."}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                onClick={refreshAllFreights}
+                disabled={refreshingFreights || autoCalculatingFreights}
+                variant="outline"
+                size="sm"
+                className="whitespace-nowrap"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${refreshingFreights ? 'animate-spin' : ''}`} />
+                {refreshingFreights ? 'Atualizando...' : 'Atualizar Fretes'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Freight Calculator */}
       <FreightCalculator
         products={products}
         onFreightCalculated={handleFreightCalculated}
         loadingFreight={loadingFreight}
         setLoadingFreight={setLoadingFreight}
+        initialZipCode={DEFAULT_SENDER_ZIP}
       />
 
       {/* Action Buttons */}
