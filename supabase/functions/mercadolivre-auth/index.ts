@@ -27,8 +27,9 @@ serve(async (req) => {
     console.log('Using Client ID:', ML_CLIENT_ID)
 
     if (action === 'getAuthUrl') {
-      // Use the React route instead of static HTML file
-      const REDIRECT_URI = 'https://mercado-valor-ajuste.lovable.app/auth-callback'
+      // Get the origin from the request to build the correct redirect URI
+      const origin = req.headers.get('origin') || 'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
+      const REDIRECT_URI = `${origin}/auth-callback`
       console.log('Redirect URI:', REDIRECT_URI)
       
       const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`
@@ -42,7 +43,9 @@ serve(async (req) => {
 
     if (action === 'exchangeCode') {
       console.log('Exchanging code for token...')
-      const REDIRECT_URI = 'https://mercado-valor-ajuste.lovable.app/auth-callback'
+      // Get the origin from the request to build the correct redirect URI
+      const origin = req.headers.get('origin') || 'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
+      const REDIRECT_URI = `${origin}/auth-callback`
       
       // Exchange authorization code for access token
       const tokenResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
