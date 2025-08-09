@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Edit, Trash2, DollarSign, AlertCircle, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AdditionalCost {
   id?: string;
@@ -36,6 +37,7 @@ export const CostManagementPanel: React.FC<CostManagementPanelProps> = ({ onCost
   const [editingCost, setEditingCost] = useState<AdditionalCost | null>(null);
   const [showForm, setShowForm] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [formData, setFormData] = useState<AdditionalCost>({
     name: '',
@@ -68,42 +70,51 @@ export const CostManagementPanel: React.FC<CostManagementPanelProps> = ({ onCost
   }, [toast, onCostsUpdate]);
 
   useEffect(() => {
-    loadCosts();
-  }, [loadCosts]);
+    if (user) {
+      loadCosts();
+    }
+  }, [loadCosts, user]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!user) {
+      toast({
+        title: "Você precisa estar logado",
+        description: "Faça login para salvar custos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
-
     try {
-      if (editingCost) {
-        // Update existing cost
+      const basePayload = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        cost_type: formData.cost_type,
+        value: Number(formData.value) || 0,
+        percentage_base: formData.cost_type === 'percentage' ? (formData.percentage_base || 'subtotal') : null,
+        is_active: !!formData.is_active,
+      };
+
+      if (editingCost?.id) {
         const { error } = await supabase
           .from('additional_costs')
-          .update(formData)
-          .eq('id', editingCost.id);
-
+          .update(basePayload)
+          .eq('id', editingCost.id)
+          .eq('user_id', user.id);
         if (error) throw error;
-
-        toast({
-          title: "Custo atualizado",
-          description: "Custo adicional atualizado com sucesso",
-        });
+        toast({ title: "Custo atualizado", description: "Custo adicional atualizado com sucesso" });
       } else {
-        // Create new cost
+        const insertPayload = { ...basePayload, user_id: user.id };
         const { error } = await supabase
           .from('additional_costs')
-          .insert([formData]);
-
+          .insert([insertPayload]);
         if (error) throw error;
-
-        toast({
-          title: "Custo adicionado",
-          description: "Novo custo adicional criado com sucesso",
-        });
+        toast({ title: "Custo adicionado", description: "Novo custo adicional criado com sucesso" });
       }
 
-      // Reset form and reload costs
       setFormData({
         name: '',
         description: '',
@@ -115,18 +126,18 @@ export const CostManagementPanel: React.FC<CostManagementPanelProps> = ({ onCost
       setEditingCost(null);
       setShowForm(false);
       await loadCosts();
-
     } catch (error) {
-      console.error('Erro ao salvar custo:', error);
+      const err: any = error;
+      console.error('Erro ao salvar custo:', err);
       toast({
         title: "Erro ao salvar custo",
-        description: error.message,
+        description: err?.message || 'Tente novamente.',
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [formData, editingCost, toast, loadCosts]);
+  }, [formData, editingCost, toast, loadCosts, user]);
 
   const handleEdit = useCallback((cost: AdditionalCost) => {
     setEditingCost(cost);
