@@ -7,7 +7,8 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAuth } from "@/hooks/useAuth";
-import { ShoppingCart, Calculator, Download, Globe, LogIn } from "lucide-react";
+import { ShoppingCart, Calculator, Download, Globe, LogIn, TrendingUp } from "lucide-react";
+import { useEffect } from "react";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -18,6 +19,14 @@ const Index = () => {
     user: user ? 'Autenticado' : 'Não autenticado',
     userId: user?.id 
   });
+
+  useEffect(() => {
+    document.title = 'MercadoValor | Novas funcionalidades';
+    const meta = document.querySelector('meta[name="description"]') || document.createElement('meta');
+    meta.setAttribute('name', 'description');
+    meta.setAttribute('content', 'Destaque: Precificação com custos, NF-e e margem alvo.');
+    document.head.appendChild(meta);
+  }, []);
 
   if (loading) {
     return (
@@ -49,6 +58,12 @@ const Index = () => {
           </div>
           <div className="flex items-center space-x-4">
             <LanguageSelector />
+            <Button variant="outline" asChild>
+              <a href="/pricing" className="flex items-center gap-2">
+                <Calculator className="h-4 w-4" />
+                Ver Precificação
+              </a>
+            </Button>
             <Button asChild>
               <a href="/auth" className="flex items-center gap-2">
                 <LogIn className="h-4 w-4" />
@@ -62,29 +77,39 @@ const Index = () => {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
-          <h2 className="text-5xl font-bold text-gray-900 mb-6 bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-            {t('hero.title')}
-          </h2>
+          <h1 className="text-5xl font-bold text-gray-900 mb-6 bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+            Plataforma completa para gestão e precificação de produtos
+          </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            {t('hero.subtitle')}
+            Importação de NF-e, custos adicionais e cálculo automático de preço sugerido com margem alvo.
           </p>
-          <div className="flex flex-wrap justify-center gap-4 mb-12">
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
             <Badge variant="secondary" className="text-sm py-2 px-4">
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              {t('features.mercadolivre')}
+              <ShoppingCart className="h-4 w-4 mr-2" /> Importação de produtos e NF-e
             </Badge>
             <Badge variant="secondary" className="text-sm py-2 px-4">
-              <Calculator className="h-4 w-4 mr-2" />
-              {t('features.automatic_calculation')}
+              <Calculator className="h-4 w-4 mr-2" /> Precificação automática
             </Badge>
             <Badge variant="secondary" className="text-sm py-2 px-4">
-              <Download className="h-4 w-4 mr-2" />
-              {t('features.csv_export')}
+              <Download className="h-4 w-4 mr-2" /> Exportação CSV
             </Badge>
             <Badge variant="secondary" className="text-sm py-2 px-4">
-              <Globe className="h-4 w-4 mr-2" />
-              {t('features.multilanguage')}
+              <Globe className="h-4 w-4 mr-2" /> Multi-idioma
             </Badge>
+          </div>
+          <div className="flex justify-center gap-3">
+            <Button asChild>
+              <a href="/pricing" className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Ver Precificação
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/auth" className="flex items-center gap-2">
+                <LogIn className="h-5 w-5" />
+                Entrar
+              </a>
+            </Button>
           </div>
         </div>
 
@@ -135,18 +160,24 @@ const Index = () => {
 
         {/* CTA Section */}
         <div className="text-center">
-          <Card className="max-w-md mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+          <Card className="max-w-2xl mx-auto shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">{t('auth.welcome')}</CardTitle>
+              <CardTitle className="text-2xl">Novas funcionalidades de Precificação</CardTitle>
               <CardDescription>
-                {t('auth.welcome_description')}
+                Importe NF-e, gerencie custos adicionais e calcule preços com margem alvo automaticamente.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-lg py-6">
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button asChild className="w-full">
+                <a href="/pricing" className="flex items-center justify-center gap-2">
+                  <Calculator className="h-5 w-5" />
+                  Explorar Precificação
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="w-full">
                 <a href="/auth" className="flex items-center justify-center gap-2">
                   <LogIn className="h-5 w-5" />
-                  Começar Agora
+                  Criar conta grátis
                 </a>
               </Button>
             </CardContent>

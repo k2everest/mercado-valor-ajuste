@@ -6,9 +6,18 @@ import { DataImportPanel } from "@/components/pricing/DataImportPanel";
 import { CostManagementPanel } from "@/components/pricing/CostManagementPanel";
 import { TaxSettingsPanel } from "@/components/pricing/TaxSettingsPanel";
 import { PricingDashboard } from "@/components/pricing/PricingDashboard";
+import { useEffect } from "react";
 
 export default function Pricing() {
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    document.title = "Precificação | MercadoValor";
+    const meta = document.querySelector('meta[name="description"]') || document.createElement('meta');
+    meta.setAttribute('name', 'description');
+    meta.setAttribute('content', 'Sistema de precificação: custos, impostos, margem e preço sugerido.');
+    document.head.appendChild(meta);
+  }, []);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
