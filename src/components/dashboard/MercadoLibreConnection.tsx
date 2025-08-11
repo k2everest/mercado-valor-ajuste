@@ -46,6 +46,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
         description: "Sua conta foi desconectada do Mercado Livre com sucesso",
       });
       
+      setIsConnected(false);
       onConnectionChange(false);
       onConnect([]);
       
@@ -110,6 +111,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
         
         console.log('🗑️ Token inválido, removendo...');
         SecureStorage.removeSecureItem('ml_tokens');
+        setIsConnected(false);
         onConnectionChange(false);
         onConnect([]);
         
@@ -175,9 +177,12 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       await SecureStorage.setSecureItem('ml_oauth_state', state);
 
       // Obter URL de autorização
+      console.log('🌐 Fazendo chamada para mercadolivre-auth...');
       const { data: authData, error: authError } = await supabase.functions.invoke('mercadolivre-auth', {
         body: { action: 'getAuthUrl', state }
       });
+
+      console.log('📡 Resposta da função auth:', { authData, authError });
 
       if (authError) {
         console.error('❌ Erro ao obter URL de autorização:', authError);
@@ -185,6 +190,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       }
 
       if (!authData?.authUrl) {
+        console.error('❌ URL de autorização não recebida:', authData);
         throw new Error('URL de autorização não recebida do servidor');
       }
 
@@ -223,11 +229,15 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
               body: { action: 'exchangeCode', code }
             });
 
+            console.log('🔑 Resposta do token exchange:', { tokenData, tokenError });
+
             if (tokenError) {
+              console.error('❌ Erro no token exchange:', tokenError);
               throw new Error(`Erro ao obter token: ${tokenError.message}`);
             }
 
             if (!tokenData?.access_token) {
+              console.error('❌ Token não recebido:', tokenData);
               throw new Error('Token de acesso não recebido');
             }
 
