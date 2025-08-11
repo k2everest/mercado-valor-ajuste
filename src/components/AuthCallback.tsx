@@ -3,54 +3,78 @@ import { useEffect } from 'react';
 
 const AuthCallback = () => {
   useEffect(() => {
+    console.log('🚀 AuthCallback React component iniciado');
+    console.log('🌐 URL atual:', window.location.href);
+    
     try {
-      console.log('Auth callback iniciado');
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       const state = urlParams.get('state');
       const error = urlParams.get('error');
 
+      console.log('🔍 Parâmetros recebidos:', { code: !!code, state: !!state, error });
+
       if (error) {
-        console.error('Erro OAuth:', error);
+        console.error('❌ Erro OAuth recebido:', error);
         
-        window.opener?.postMessage({
-          type: 'MERCADOLIVRE_AUTH_ERROR',
-          error: error
-        }, window.location.origin);
+        if (window.opener) {
+          console.log('📤 Enviando erro para janela pai...');
+          window.opener.postMessage({
+            type: 'MERCADOLIVRE_AUTH_ERROR',
+            error: error
+          }, window.location.origin);
+        }
         
-        // Close window after sending error
         setTimeout(() => {
+          console.log('🚪 Fechando janela...');
           window.close();
         }, 1000);
         return;
       }
 
       if (code) {
-        console.log('Código de autorização recebido, enviando para janela pai...');
+        console.log('✅ Código de autorização recebido!');
         
-        // Send data to parent window
-        window.opener?.postMessage({
-          type: 'MERCADOLIVRE_AUTH_SUCCESS',
-          code: code,
-          state: state
-        }, window.location.origin);
+        if (window.opener) {
+          console.log('📤 Enviando sucesso para janela pai...');
+          window.opener.postMessage({
+            type: 'MERCADOLIVRE_AUTH_SUCCESS',
+            code: code,
+            state: state
+          }, window.location.origin);
+        } else {
+          console.warn('⚠️ window.opener não encontrado');
+        }
         
-        // Close window after 1 second
         setTimeout(() => {
+          console.log('🚪 Fechando janela...');
           window.close();
         }, 1000);
       } else {
-        throw new Error('Código de autorização não encontrado');
+        const errorMsg = 'Código de autorização não encontrado';
+        console.error('❌', errorMsg);
+        
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'MERCADOLIVRE_AUTH_ERROR',
+            error: errorMsg
+          }, window.location.origin);
+        }
+        
+        setTimeout(() => {
+          window.close();
+        }, 1000);
       }
     } catch (err: any) {
-      console.error('Erro no callback:', err);
+      console.error('❌ Erro no callback:', err);
       
-      window.opener?.postMessage({
-        type: 'MERCADOLIVRE_AUTH_ERROR',
-        error: err.message
-      }, window.location.origin);
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'MERCADOLIVRE_AUTH_ERROR',
+          error: err.message
+        }, window.location.origin);
+      }
       
-      // Close window after sending error
       setTimeout(() => {
         window.close();
       }, 1000);
