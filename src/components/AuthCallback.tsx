@@ -22,7 +22,7 @@ const AuthCallback = () => {
           window.opener.postMessage({
             type: 'MERCADOLIVRE_AUTH_ERROR',
             error: error
-          }, window.location.origin);
+          }, '*');
         }
         
         setTimeout(() => {
@@ -41,7 +41,7 @@ const AuthCallback = () => {
             type: 'MERCADOLIVRE_AUTH_SUCCESS',
             code: code,
             state: state
-          }, window.location.origin);
+          }, '*');
         } else {
           console.warn('⚠️ window.opener não encontrado');
         }
@@ -58,7 +58,7 @@ const AuthCallback = () => {
           window.opener.postMessage({
             type: 'MERCADOLIVRE_AUTH_ERROR',
             error: errorMsg
-          }, window.location.origin);
+          }, '*');
         }
         
         setTimeout(() => {
@@ -72,7 +72,7 @@ const AuthCallback = () => {
         window.opener.postMessage({
           type: 'MERCADOLIVRE_AUTH_ERROR',
           error: err.message
-        }, window.location.origin);
+        }, '*');
       }
       
       setTimeout(() => {

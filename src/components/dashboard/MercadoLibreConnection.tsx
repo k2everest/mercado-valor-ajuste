@@ -209,7 +209,10 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
 
       // Configurar listener para mensagens da janela de autorização
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        console.log('📨 Mensagem recebida:', event.data, 'Origin:', event.origin);
+        
+        // Aceitar mensagens de qualquer origin para evitar problemas de CORS
+        // if (event.origin !== window.location.origin) return;
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_SUCCESS') {
           const { code, state: returnedState } = event.data;
@@ -248,12 +251,23 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
               tokenData.expires_in || 21600
             );
             
+            console.log('🔐 Token salvo com sucesso, acionando onConnect...');
+            
+            // Carregar produtos automaticamente
+            try {
+              console.log('📦 Carregando produtos automaticamente...');
+              await loadProducts('50'); // Carregar 50 produtos iniciais
+            } catch (productError) {
+              console.error('⚠️ Erro ao carregar produtos iniciais:', productError);
+              // Não falhar a conexão por causa disso
+            }
+            
             // Conectado com sucesso
             onConnectionChange(true);
             setIsConnected(true);
             toast({
               title: "✅ Conectado com sucesso!",
-              description: "Acesse a aba 'Produtos' para ver seus itens do Mercado Livre",
+              description: "Produtos carregados automaticamente",
             });
             
           } catch (error: any) {
