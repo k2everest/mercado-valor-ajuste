@@ -2,11 +2,12 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Minus, Plus, Truck, Bug, Trash2 } from "lucide-react";
+import { ExternalLink, Minus, Plus, Truck, Bug, Trash2, Upload } from "lucide-react";
 import { Product } from './types';
 import { FreightDebugger } from '@/utils/freightDebug';
 import { toast } from "@/hooks/use-toast";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProductCardProps {
   product: Product;
@@ -23,6 +24,7 @@ export const ProductCard = memo(({
   loadingFreight, 
   zipCode 
 }: ProductCardProps) => {
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
   const statusColor = useMemo(() => {
     switch (product.status) {
       case 'active': return 'bg-green-100 text-green-800 border-green-200';
@@ -75,6 +77,56 @@ export const ProductCard = memo(({
     clearProductCache();
     onCalculateFreight(product.id);
   }, [clearProductCache, onCalculateFreight, product.id]);
+
+  const updatePriceOnML = useCallback(async () => {
+    if (!product.adjustedPrice) {
+      toast({
+        title: "❌ Erro",
+        description: "Nenhum preço ajustado disponível. Ajuste o preço primeiro.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsUpdatingPrice(true);
+    try {
+      // Get ML token from localStorage
+      const mlTokenStr = localStorage.getItem('ml_token');
+      if (!mlTokenStr) {
+        throw new Error('Token do Mercado Livre não encontrado. Reconecte sua conta.');
+      }
+
+      const mlToken = JSON.parse(mlTokenStr);
+      
+      console.log('📤 Enviando preço ajustado para o ML:', product.adjustedPrice);
+      
+      const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
+        body: {
+          productId: product.id,
+          newPrice: product.adjustedPrice,
+          accessToken: mlToken.access_token
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({
+        title: "✅ Preço atualizado!",
+        description: `Preço de R$ ${product.originalPrice.toFixed(2)} atualizado para R$ ${product.adjustedPrice.toFixed(2)} no Mercado Livre`,
+      });
+
+    } catch (error: any) {
+      console.error('❌ Erro ao atualizar preço:', error);
+      toast({
+        title: "❌ Erro ao atualizar preço",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsUpdatingPrice(false);
+    }
+  }, [product.adjustedPrice, product.id, product.originalPrice]);
 
   // Get debug info to show source
   const debugInfo = useMemo(() => FreightDebugger.getProductDebugInfo(product.id), [product.id]);
@@ -205,6 +257,18 @@ export const ProductCard = memo(({
                     Somar Custo Real
                   </Button>
                 </div>
+                
+                {product.adjustedPrice && (
+                  <Button
+                    size="sm"
+                    onClick={updatePriceOnML}
+                    disabled={isUpdatingPrice}
+                    className="flex items-center gap-1 bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isUpdatingPrice ? 'Enviando...' : 'Enviar Preço ao ML'}
+                  </Button>
+                )}
                 
                 <div className="flex gap-2">
                   <Button
