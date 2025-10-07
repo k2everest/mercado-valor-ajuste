@@ -2,6 +2,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ExternalLink, Minus, Plus, Truck, Bug, Trash2, Upload } from "lucide-react";
 import { Product } from './types';
 import { FreightDebugger } from '@/utils/freightDebug';
@@ -15,6 +16,8 @@ interface ProductCardProps {
   onAdjustPrice: (productId: string, operation: 'add' | 'subtract') => void;
   loadingFreight: boolean;
   zipCode: string;
+  isSelected?: boolean;
+  onToggleSelect?: (productId: string) => void;
 }
 
 export const ProductCard = memo(({ 
@@ -22,7 +25,9 @@ export const ProductCard = memo(({
   onCalculateFreight, 
   onAdjustPrice, 
   loadingFreight, 
-  zipCode 
+  zipCode,
+  isSelected = false,
+  onToggleSelect
 }: ProductCardProps) => {
   const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
   const statusColor = useMemo(() => {
@@ -134,11 +139,18 @@ export const ProductCard = memo(({
   const cacheAge = useMemo(() => debugInfo?.cacheAge ? Math.round(debugInfo.cacheAge / (1000 * 60 * 60)) : null, [debugInfo]);
 
   return (
-    <Card className="hover:shadow-lg transition-all duration-300 border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50">
+    <Card className={`hover:shadow-lg transition-all duration-300 border-blue-200 ${isSelected ? 'ring-2 ring-purple-500 bg-gradient-to-r from-purple-100 to-blue-100' : 'bg-gradient-to-r from-blue-50 to-purple-50'}`}>
       <CardContent className="p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-start gap-4">
+              {onToggleSelect && (
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => onToggleSelect(product.id)}
+                  className="mt-1"
+                />
+              )}
               {product.thumbnail && (
                 <img 
                   src={product.thumbnail} 

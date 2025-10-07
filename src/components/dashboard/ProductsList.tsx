@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SecureStorage } from "@/utils/secureStorage";
@@ -9,7 +10,7 @@ import { ProductsPagination } from "./ProductsPagination";
 import { FreightCalculator } from "./FreightCalculator";
 import { ProductActions } from "./ProductActions";
 import { ProductCard } from "./ProductCard";
-import { Package, Truck, X, RefreshCw } from "lucide-react";
+import { Package, Truck, X, RefreshCw, Upload, CheckSquare } from "lucide-react";
 import { Product, ProductsListProps } from './types';
 import { useFreightCalculation } from "@/hooks/useFreightCalculation";
 
@@ -62,6 +63,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [shippingFilter, setShippingFilter] = useState<'all' | 'free' | 'paid'>('all');
   const [autoCalculatingFreights, setAutoCalculatingFreights] = useState(false);
   const [refreshingFreights, setRefreshingFreights] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [sendingPrices, setSendingPrices] = useState(false);
   
   // CEP da Rua Dr. Dolzani 677, Jardim da Glória, São Paulo - SP
   const DEFAULT_SENDER_ZIP = '01546-000';
@@ -424,6 +427,122 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     }));
   };
 
+  const toggleSelectAll = () => {
+    const filteredProducts = products.filter(product => {
+      if (shippingFilter === 'free') return product.freeShipping;
+      if (shippingFilter === 'paid') return !product.freeShipping;
+      return true;
+    });
+
+    if (selectedProducts.size === filteredProducts.length) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+    }
+  };
+
+  const toggleSelectProduct = (productId: string) => {
+    setSelectedProducts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(productId)) {
+        newSet.delete(productId);
+      } else {
+        newSet.add(productId);
+      }
+      return newSet;
+    });
+  };
+
+  const sendSelectedPricesToML = async () => {
+    const selectedProductsList = products.filter(p => selectedProducts.has(p.id) && p.adjustedPrice);
+    
+    if (selectedProductsList.length === 0) {
+      toast({
+        title: "❌ Nenhum produto selecionado",
+        description: "Selecione produtos com preço ajustado para enviar",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSendingPrices(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      const mlTokenStr = localStorage.getItem('ml_token');
+      if (!mlTokenStr) {
+        throw new Error('Token do Mercado Livre não encontrado. Reconecte sua conta.');
+      }
+
+      const mlToken = JSON.parse(mlTokenStr);
+
+      toast({
+        title: "📤 Enviando preços",
+        description: `Atualizando ${selectedProductsList.length} produtos no Mercado Livre...`,
+      });
+
+      for (const product of selectedProductsList) {
+        try {
+          const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
+            body: {
+              productId: product.id,
+              newPrice: product.adjustedPrice,
+              accessToken: mlToken.access_token
+            }
+          });
+
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error);
+
+          successCount++;
+        } catch (error) {
+          console.error(`Erro ao atualizar produto ${product.id}:`, error);
+          errorCount++;
+        }
+
+        // Pequeno delay entre requisições
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (successCount > 0) {
+        toast({
+          title: "✅ Preços atualizados!",
+          description: `${successCount} produto(s) atualizado(s) com sucesso${errorCount > 0 ? `. ${errorCount} erro(s).` : ''}`,
+        });
+        
+        // Limpar seleção após envio bem-sucedido
+        setSelectedProducts(new Set());
+      }
+
+      if (errorCount > 0 && successCount === 0) {
+        toast({
+          title: "❌ Erro ao atualizar preços",
+          description: `Falha ao atualizar ${errorCount} produto(s)`,
+          variant: "destructive"
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Erro ao enviar preços:', error);
+      toast({
+        title: "❌ Erro",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setSendingPrices(false);
+    }
+  };
+
+  const filteredProducts = products.filter(product => {
+    if (shippingFilter === 'free') return product.freeShipping;
+    if (shippingFilter === 'paid') return !product.freeShipping;
+    return true;
+  });
+
+  const allFilteredSelected = filteredProducts.length > 0 && selectedProducts.size === filteredProducts.length;
+
   if (products.length === 0) {
     return (
       <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
@@ -521,15 +640,42 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         </Button>
       </div>
 
+      {/* Selection Controls */}
+      <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="select-all"
+                checked={allFilteredSelected}
+                onCheckedChange={toggleSelectAll}
+              />
+              <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                Selecionar todos ({filteredProducts.length} produtos)
+              </label>
+              {selectedProducts.size > 0 && (
+                <span className="text-sm text-purple-700 font-semibold">
+                  {selectedProducts.size} selecionado(s)
+                </span>
+              )}
+            </div>
+            {selectedProducts.size > 0 && (
+              <Button
+                onClick={sendSelectedPricesToML}
+                disabled={sendingPrices}
+                className="bg-purple-600 text-white hover:bg-purple-700"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {sendingPrices ? 'Enviando...' : `Enviar ${selectedProducts.size} Preço(s) ao ML`}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Products Grid */}
       <div className="grid gap-4">
-        {products
-          .filter(product => {
-            if (shippingFilter === 'free') return product.freeShipping;
-            if (shippingFilter === 'paid') return !product.freeShipping;
-            return true;
-          })
-          .map((product) => (
+        {filteredProducts.map((product) => (
           <ProductCard
             key={product.id}
             product={product}
@@ -543,6 +689,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             onAdjustPrice={adjustPrice}
             loadingFreight={loadingFreight[product.id] || false}
             zipCode=""
+            isSelected={selectedProducts.has(product.id)}
+            onToggleSelect={toggleSelectProduct}
           />
         ))}
       </div>
