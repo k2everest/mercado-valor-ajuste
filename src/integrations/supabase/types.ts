@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -261,6 +261,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      price_updates_history: {
+        Row: {
+          adjusted_price: number
+          freight_cost: number
+          id: string
+          is_first_update: boolean
+          new_base_price: number
+          operation: string
+          original_price: number
+          product_id: string
+          product_title: string | null
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          adjusted_price: number
+          freight_cost: number
+          id?: string
+          is_first_update?: boolean
+          new_base_price: number
+          operation: string
+          original_price: number
+          product_id: string
+          product_title?: string | null
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          adjusted_price?: number
+          freight_cost?: number
+          id?: string
+          is_first_update?: boolean
+          new_base_price?: number
+          operation?: string
+          original_price?: number
+          product_id?: string
+          product_title?: string | null
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       pricing_calculations: {
         Row: {
@@ -553,11 +595,11 @@ export type Database = {
     Functions: {
       log_security_event: {
         Args: {
-          p_user_id?: string
-          p_event_type?: string
           p_event_data?: Json
+          p_event_type?: string
           p_ip_address?: string
           p_user_agent?: string
+          p_user_id?: string
         }
         Returns: undefined
       }

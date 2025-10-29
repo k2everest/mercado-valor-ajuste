@@ -116,10 +116,60 @@ export const ProductCard = memo(({
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Check if this is the first update for this product
+      const { data: existingUpdates } = await supabase
+        .from('price_updates_history')
+        .select('id')
+        .eq('product_id', product.id)
+        .limit(1);
+
+      const isFirstUpdate = !existingUpdates || existingUpdates.length === 0;
+
+      // Calculate new base price: adjusted price - freight cost
+      const newBasePrice = product.adjustedPrice - (product.sellerFreightCost || 0);
+      
+      // Determine operation (add or subtract)
+      const operation = product.adjustedPrice > product.originalPrice ? 'add' : 'subtract';
+
+      // Save to history with properly typed object
+      const historyRecord = {
+        user_id: user.id,
+        product_id: product.id,
+        product_title: product.title,
+        original_price: product.originalPrice,
+        freight_cost: product.sellerFreightCost || 0,
+        adjusted_price: product.adjustedPrice,
+        new_base_price: newBasePrice,
+        operation: operation,
+        is_first_update: isFirstUpdate
+      };
+
+      const { error: historyError } = await supabase
+        .from('price_updates_history')
+        .insert(historyRecord);
+
+      if (historyError) {
+        console.error('Erro ao salvar histórico:', historyError);
+      }
+
       toast({
         title: "✅ Preço atualizado!",
-        description: `Preço de R$ ${product.originalPrice.toFixed(2)} atualizado para R$ ${product.adjustedPrice.toFixed(2)} no Mercado Livre`,
+        description: isFirstUpdate 
+          ? `Preço enviado: R$ ${product.adjustedPrice.toFixed(2)}. Novo preço base: R$ ${newBasePrice.toFixed(2)}`
+          : `Preço de R$ ${product.originalPrice.toFixed(2)} atualizado para R$ ${product.adjustedPrice.toFixed(2)} no Mercado Livre`,
       });
+
+      // If first update, update the product's original price locally
+      if (isFirstUpdate) {
+        // Trigger a callback to parent to update the product
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
 
     } catch (error: any) {
       console.error('❌ Erro ao atualizar preço:', error);
@@ -131,7 +181,7 @@ export const ProductCard = memo(({
     } finally {
       setIsUpdatingPrice(false);
     }
-  }, [product.adjustedPrice, product.id, product.originalPrice]);
+  }, [product.adjustedPrice, product.id, product.originalPrice, product.title, product.sellerFreightCost]);
 
   // Get debug info to show source
   const debugInfo = useMemo(() => FreightDebugger.getProductDebugInfo(product.id), [product.id]);

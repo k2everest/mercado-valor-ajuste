@@ -477,6 +477,10 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       const mlToken = JSON.parse(mlTokenStr);
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
       toast({
         title: "📤 Enviando preços",
         description: `Atualizando ${selectedProductsList.length} produtos no Mercado Livre...`,
@@ -494,6 +498,42 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
           if (error) throw error;
           if (!data.success) throw new Error(data.error);
+
+          // Check if this is the first update for this product
+          const { data: existingUpdates } = await supabase
+            .from('price_updates_history')
+            .select('id')
+            .eq('product_id', product.id)
+            .limit(1);
+
+          const isFirstUpdate = !existingUpdates || existingUpdates.length === 0;
+
+          // Calculate new base price: adjusted price - freight cost
+          const newBasePrice = product.adjustedPrice! - (product.sellerFreightCost || 0);
+          
+          // Determine operation (add or subtract)
+          const operation = product.adjustedPrice! > product.originalPrice ? 'add' : 'subtract';
+
+          // Save to history with properly typed object
+          const historyRecord = {
+            user_id: user.id,
+            product_id: product.id,
+            product_title: product.title,
+            original_price: product.originalPrice,
+            freight_cost: product.sellerFreightCost || 0,
+            adjusted_price: product.adjustedPrice!,
+            new_base_price: newBasePrice,
+            operation: operation,
+            is_first_update: isFirstUpdate
+          };
+
+          const { error: historyError } = await supabase
+            .from('price_updates_history')
+            .insert(historyRecord);
+
+          if (historyError) {
+            console.error('Erro ao salvar histórico do produto', product.id, ':', historyError);
+          }
 
           successCount++;
         } catch (error) {
