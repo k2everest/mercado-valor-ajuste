@@ -13,6 +13,7 @@ import { ProductCard } from "./ProductCard";
 import { Package, Truck, X, RefreshCw, Upload, CheckSquare } from "lucide-react";
 import { Product, ProductsListProps } from './types';
 import { useFreightCalculation } from "@/hooks/useFreightCalculation";
+import { useFreightPersistence } from "@/hooks/useFreightPersistence";
 
 // Cache manager for products to prevent duplicate loading
 class ProductsCache {
@@ -66,12 +67,14 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [sendingPrices, setSendingPrices] = useState(false);
   const [sendingAdjustedPrices, setSendingAdjustedPrices] = useState(false);
+  const [currentZipCode, setCurrentZipCode] = useState<string>('');
   
   // CEP da Rua Dr. Dolzani 677, Jardim da Glória, São Paulo - SP
   const DEFAULT_SENDER_ZIP = '01546-000';
   
   const cache = ProductsCache.getInstance();
   const { fetchFreightCosts } = useFreightCalculation();
+  const { lastZipCode, loadLastCalculations, saveCalculations } = useFreightPersistence();
 
   console.log('ProductsList rendered with:', {
     productsCount: products.length,
@@ -81,6 +84,45 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     paginationTotal: pagination?.total,
     showPagination: !!(pagination && pagination.hasMore && onLoadMore)
   });
+
+  // Carregar dados da última sessão ao montar
+  useEffect(() => {
+    const loadLastSession = async () => {
+      console.log('🔄 Carregando dados da última sessão...');
+      const lastCalculations = await loadLastCalculations();
+      
+      if (lastCalculations.length > 0) {
+        console.log('✅ Dados anteriores carregados:', lastCalculations.length, 'produtos');
+        toast({
+          title: "📋 Sessão anterior restaurada",
+          description: `${lastCalculations.length} produtos com cálculos anteriores carregados`,
+        });
+        
+        // Mesclar com produtos atuais se houver
+        if (products.length > 0) {
+          const mergedProducts = products.map(current => {
+            const saved = lastCalculations.find(p => p.id === current.id);
+            return saved ? { ...current, ...saved } : current;
+          });
+          setProducts(mergedProducts);
+          cache.setProducts(mergedProducts);
+        } else {
+          setProducts(lastCalculations);
+          cache.setProducts(lastCalculations);
+        }
+      }
+      
+      // Definir CEP da última sessão
+      if (lastZipCode) {
+        console.log('📍 CEP da sessão anterior:', lastZipCode);
+        setCurrentZipCode(lastZipCode);
+      } else {
+        setCurrentZipCode(DEFAULT_SENDER_ZIP);
+      }
+    };
+    
+    loadLastSession();
+  }, [lastZipCode]);
 
   // Load products if none are provided initially
   useEffect(() => {
@@ -128,8 +170,9 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             description: `${data.products.length} produtos importados do Mercado Livre`,
           });
 
-          // Calcular fretes automaticamente com CEP padrão
-          calculateInitialFreights(data.products);
+          // Calcular fretes automaticamente com CEP padrão ou último usado
+          const zipToUse = lastZipCode || DEFAULT_SENDER_ZIP;
+          calculateInitialFreights(data.products, zipToUse);
 
         } catch (error: any) {
           console.error('❌ Error loading initial products:', error);
@@ -145,11 +188,11 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       loadInitialProducts();
     }
-  }, []);
+  }, [lastZipCode]);
 
   // Função para calcular fretes automaticamente na primeira carga
-  const calculateInitialFreights = async (loadedProducts: Product[]) => {
-    console.log('🚚 Iniciando cálculo automático de fretes com CEP padrão:', DEFAULT_SENDER_ZIP);
+  const calculateInitialFreights = async (loadedProducts: Product[], zipCode: string) => {
+    console.log('🚚 Iniciando cálculo automático de fretes com CEP:', zipCode);
     setAutoCalculatingFreights(true);
     
     try {
@@ -163,7 +206,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       toast({
         title: "🚚 Calculando fretes automaticamente",
-        description: `Calculando frete para ${productsWithoutFreight.length} produtos com CEP padrão (${DEFAULT_SENDER_ZIP})`,
+        description: `Calculando frete para ${productsWithoutFreight.length} produtos com CEP ${zipCode}`,
       });
 
       // Calcular fretes em paralelo (máximo 3 por vez para não sobrecarregar)
@@ -174,7 +217,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         await Promise.all(
           batch.map(async (product) => {
             try {
-              const result = await fetchFreightCosts(product.id, DEFAULT_SENDER_ZIP);
+              const result = await fetchFreightCosts(product.id, zipCode);
               if (result) {
                 handleFreightCalculated(product.id, result);
               }
@@ -192,7 +235,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       toast({
         title: "✅ Fretes calculados!",
-        description: `Fretes calculados automaticamente para produtos com CEP ${DEFAULT_SENDER_ZIP}`,
+        description: `Fretes calculados automaticamente para produtos com CEP ${zipCode}`,
       });
 
     } catch (error: any) {
@@ -355,26 +398,34 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   };
 
   const adjustPrice = (productId: string, operation: 'add' | 'subtract') => {
-    setProducts(prev => prev.map(product => {
-      if (product.id === productId) {
-        const freightCost = product.sellerFreightCost;
-        if (!freightCost) {
-          toast({
-            title: "Calcule o frete primeiro",
-            description: "É necessário calcular o custo real do frete antes de ajustar o preço",
-            variant: "destructive"
-          });
-          return product;
+    setProducts(prev => {
+      const updated = prev.map(product => {
+        if (product.id === productId) {
+          const freightCost = product.sellerFreightCost;
+          if (!freightCost) {
+            toast({
+              title: "Calcule o frete primeiro",
+              description: "É necessário calcular o custo real do frete antes de ajustar o preço",
+              variant: "destructive"
+            });
+            return product;
+          }
+          
+          const adjustment = operation === 'add' ? freightCost : -freightCost;
+          return {
+            ...product,
+            adjustedPrice: product.originalPrice + adjustment
+          };
         }
-        
-        const adjustment = operation === 'add' ? freightCost : -freightCost;
-        return {
-          ...product,
-          adjustedPrice: product.originalPrice + adjustment
-        };
-      }
-      return product;
-    }));
+        return product;
+      });
+      
+      // Salvar ajustes
+      const zipToSave = currentZipCode || DEFAULT_SENDER_ZIP;
+      saveCalculations(updated, zipToSave);
+      
+      return updated;
+    });
 
     toast({
       title: "Preço ajustado!",
@@ -385,17 +436,27 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const adjustAllPrices = (operation: 'add' | 'subtract') => {
     let adjustedCount = 0;
     
-    setProducts(prev => prev.map(product => {
-      if (product.freeShipping && product.sellerFreightCost) {
-        const adjustment = operation === 'add' ? product.sellerFreightCost : -product.sellerFreightCost;
-        adjustedCount++;
-        return {
-          ...product,
-          adjustedPrice: product.originalPrice + adjustment
-        };
+    setProducts(prev => {
+      const updated = prev.map(product => {
+        if (product.freeShipping && product.sellerFreightCost) {
+          const adjustment = operation === 'add' ? product.sellerFreightCost : -product.sellerFreightCost;
+          adjustedCount++;
+          return {
+            ...product,
+            adjustedPrice: product.originalPrice + adjustment
+          };
+        }
+        return product;
+      });
+      
+      // Salvar ajustes em massa
+      if (adjustedCount > 0) {
+        const zipToSave = currentZipCode || DEFAULT_SENDER_ZIP;
+        saveCalculations(updated, zipToSave);
       }
-      return product;
-    }));
+      
+      return updated;
+    });
 
     if (adjustedCount === 0) {
       toast({
@@ -416,16 +477,24 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     sellerFreightCost: number;
     freightMethod: string;
   }) => {
-    setProducts(prev => prev.map(product => {
-      if (product.id === productId) {
-        return {
-          ...product,
-          ...freightData,
-          adjustedPrice: undefined
-        };
-      }
-      return product;
-    }));
+    setProducts(prev => {
+      const updated = prev.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            ...freightData,
+            adjustedPrice: undefined
+          };
+        }
+        return product;
+      });
+      
+      // Salvar cálculos atualizados
+      const zipToSave = currentZipCode || DEFAULT_SENDER_ZIP;
+      saveCalculations(updated, zipToSave);
+      
+      return updated;
+    });
   };
 
   const toggleSelectAll = () => {
@@ -766,7 +835,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
         onFreightCalculated={handleFreightCalculated}
         loadingFreight={loadingFreight}
         setLoadingFreight={setLoadingFreight}
-        initialZipCode={DEFAULT_SENDER_ZIP}
+        initialZipCode={currentZipCode || DEFAULT_SENDER_ZIP}
+        onZipCodeChange={setCurrentZipCode}
       />
 
       {/* Action Buttons */}
