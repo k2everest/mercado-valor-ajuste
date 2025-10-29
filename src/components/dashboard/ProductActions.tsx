@@ -9,10 +9,16 @@ import { Product } from './types';
 interface ProductActionsProps {
   products: Product[];
   onAdjustAllPrices: (operation: 'add' | 'subtract') => void;
+  onSendAdjustedPrices?: () => void;
+  sendingPrices?: boolean;
 }
 
-export const ProductActions = ({ products, onAdjustAllPrices }: ProductActionsProps) => {
+export const ProductActions = ({ products, onAdjustAllPrices, onSendAdjustedPrices, sendingPrices }: ProductActionsProps) => {
   const { t } = useLanguage();
+  
+  const adjustedFreeShippingCount = products.filter(
+    p => p.freeShipping && p.adjustedPrice && p.adjustedPrice !== p.originalPrice
+  ).length;
 
   const exportToCSV = () => {
     const csvContent = [
@@ -68,6 +74,16 @@ export const ProductActions = ({ products, onAdjustAllPrices }: ProductActionsPr
             <Plus className="h-4 w-4" />
             Somar Custo Real do Frete
           </Button>
+          {adjustedFreeShippingCount > 0 && onSendAdjustedPrices && (
+            <Button
+              onClick={onSendAdjustedPrices}
+              disabled={sendingPrices}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+            >
+              <Package className="h-4 w-4" />
+              {sendingPrices ? 'Enviando...' : `Enviar ${adjustedFreeShippingCount} Preço(s) Ajustado(s) ao ML`}
+            </Button>
+          )}
           <Button
             onClick={exportToCSV}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700"

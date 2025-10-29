@@ -65,6 +65,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
   const [refreshingFreights, setRefreshingFreights] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [sendingPrices, setSendingPrices] = useState(false);
+  const [sendingAdjustedPrices, setSendingAdjustedPrices] = useState(false);
   
   // CEP da Rua Dr. Dolzani 677, Jardim da Glória, São Paulo - SP
   const DEFAULT_SENDER_ZIP = '01546-000';
@@ -453,6 +454,128 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     });
   };
 
+  const sendAdjustedFreeShippingPricesToML = async () => {
+    // Filter products with free shipping that have been adjusted
+    const adjustedFreeShippingProducts = products.filter(
+      p => p.freeShipping && p.adjustedPrice && p.adjustedPrice !== p.originalPrice
+    );
+    
+    if (adjustedFreeShippingProducts.length === 0) {
+      toast({
+        title: "❌ Nenhum produto elegível",
+        description: "Nenhum produto com frete grátis foi reajustado ainda",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSendingAdjustedPrices(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      const mlTokenStr = localStorage.getItem('ml_token');
+      if (!mlTokenStr) {
+        throw new Error('Token do Mercado Livre não encontrado. Reconecte sua conta.');
+      }
+
+      const mlToken = JSON.parse(mlTokenStr);
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      toast({
+        title: "📤 Enviando preços ajustados",
+        description: `Atualizando ${adjustedFreeShippingProducts.length} produtos com frete grátis no Mercado Livre...`,
+      });
+
+      for (const product of adjustedFreeShippingProducts) {
+        try {
+          const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
+            body: {
+              productId: product.id,
+              newPrice: product.adjustedPrice,
+              accessToken: mlToken.access_token
+            }
+          });
+
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error);
+
+          // Check if this is the first update for this product
+          const { data: existingUpdates } = await supabase
+            .from('price_updates_history')
+            .select('id')
+            .eq('product_id', product.id)
+            .limit(1);
+
+          const isFirstUpdate = !existingUpdates || existingUpdates.length === 0;
+
+          // Calculate new base price: adjusted price - freight cost
+          const newBasePrice = product.adjustedPrice! - (product.sellerFreightCost || 0);
+          
+          // Determine operation (add or subtract)
+          const operation = product.adjustedPrice! > product.originalPrice ? 'add' : 'subtract';
+
+          // Save to history
+          const historyRecord = {
+            user_id: user.id,
+            product_id: product.id,
+            product_title: product.title,
+            original_price: product.originalPrice,
+            freight_cost: product.sellerFreightCost || 0,
+            adjusted_price: product.adjustedPrice!,
+            new_base_price: newBasePrice,
+            operation: operation,
+            is_first_update: isFirstUpdate
+          };
+
+          const { error: historyError } = await supabase
+            .from('price_updates_history')
+            .insert(historyRecord);
+
+          if (historyError) {
+            console.error('Erro ao salvar histórico do produto', product.id, ':', historyError);
+          }
+
+          successCount++;
+        } catch (error) {
+          console.error(`Erro ao atualizar produto ${product.id}:`, error);
+          errorCount++;
+        }
+
+        // Pequeno delay entre requisições
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (successCount > 0) {
+        toast({
+          title: "✅ Preços enviados com sucesso!",
+          description: `${successCount} produto(s) com frete grátis atualizado(s)${errorCount > 0 ? `. ${errorCount} erro(s).` : ''}`,
+        });
+      }
+
+      if (errorCount > 0 && successCount === 0) {
+        toast({
+          title: "❌ Erro ao atualizar preços",
+          description: `Falha ao atualizar ${errorCount} produto(s)`,
+          variant: "destructive"
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Erro ao enviar preços ajustados:', error);
+      toast({
+        title: "❌ Erro",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setSendingAdjustedPrices(false);
+    }
+  };
+
   const sendSelectedPricesToML = async () => {
     const selectedProductsList = products.filter(p => selectedProducts.has(p.id) && p.adjustedPrice);
     
@@ -650,6 +773,8 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
       <ProductActions
         products={products}
         onAdjustAllPrices={adjustAllPrices}
+        onSendAdjustedPrices={sendAdjustedFreeShippingPricesToML}
+        sendingPrices={sendingAdjustedPrices}
       />
 
       {/* Shipping Filter Buttons */}
