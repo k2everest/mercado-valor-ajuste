@@ -329,14 +329,39 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       console.log('Loaded new products:', data.products.length);
 
-      const newProducts = [...products, ...data.products];
+      // Buscar dados salvos e mesclar
+      const lastCalculations = await loadLastCalculations();
+      const productsWithSavedData = data.products.map((newProduct: Product) => {
+        const saved = lastCalculations.find(p => p.id === newProduct.id);
+        if (saved) {
+          console.log(`✅ Aplicando dados salvos para produto ${newProduct.id}`);
+          return { ...newProduct, ...saved };
+        }
+        return newProduct;
+      });
+
+      const newProducts = [...products, ...productsWithSavedData];
       setProducts(newProducts);
+      cache.setProducts(newProducts);
       onLoadMore(newProducts, data.pagination);
 
+      const withSavedData = productsWithSavedData.filter((p: Product) => p.freightCost !== undefined).length;
+      
       toast({
         title: "✅ Produtos carregados!",
-        description: `${data.products.length} novos produtos foram adicionados`,
+        description: withSavedData > 0 
+          ? `${data.products.length} produtos adicionados (${withSavedData} com dados salvos)`
+          : `${data.products.length} novos produtos foram adicionados`,
       });
+
+      // Calcular fretes apenas para produtos novos sem dados salvos
+      const zipToUse = lastZipCode || currentZipCode || DEFAULT_SENDER_ZIP;
+      const productsNeedingFreight = productsWithSavedData.filter((p: Product) => !p.freightCost && !p.sellerFreightCost);
+      
+      if (productsNeedingFreight.length > 0) {
+        console.log(`🚚 ${productsNeedingFreight.length} produtos precisam de cálculo de frete`);
+        calculateInitialFreights(productsNeedingFreight, zipToUse);
+      }
 
     } catch (error: any) {
       console.error('Error loading more products:', error);
