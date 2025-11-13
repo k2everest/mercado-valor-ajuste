@@ -1,7 +1,1 @@
 project_id = "gbjberhxemigrnhyqwvz"
-
-[functions.mercadolivre-refresh-token]
-verify_jwt = false
-
-[functions.mercadolivre-update-price]
-verify_jwt = false

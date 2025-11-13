@@ -1,9 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Input validation schema
+const refreshTokenSchema = z.object({
+  refreshToken: z.string()
+    .min(10, "Invalid refresh token format")
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,18 +18,23 @@ serve(async (req) => {
   }
 
   try {
-    const { refreshToken } = await req.json()
+    const body = await req.json()
 
-    if (!refreshToken) {
-      console.error('❌ Refresh token não fornecido')
+    // Validate input
+    const validationResult = refreshTokenSchema.safeParse(body);
+    if (!validationResult.success) {
+      console.error('❌ Validation error:', validationResult.error.errors);
       return new Response(
         JSON.stringify({ 
-          error: 'Refresh token é obrigatório.',
-          code: 'MISSING_REFRESH_TOKEN'
+          error: 'Dados inválidos',
+          code: 'VALIDATION_ERROR',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    const { refreshToken } = validationResult.data;
 
     const clientId = Deno.env.get('ML_CLIENT_ID')
     const clientSecret = Deno.env.get('ML_CLIENT_SECRET')

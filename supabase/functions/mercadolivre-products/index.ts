@@ -1,10 +1,18 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Input validation schema
+const productsRequestSchema = z.object({
+  accessToken: z.string().min(10, "Invalid access token"),
+  limit: z.number().int().min(-1).max(100).default(50),
+  offset: z.number().int().min(0).default(0)
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,18 +20,23 @@ serve(async (req) => {
   }
 
   try {
-    const { accessToken, limit = 50, offset = 0 } = await req.json() // Changed default from 20 to 50
+    const body = await req.json()
 
-    if (!accessToken) {
-      console.error('❌ Access token não fornecido')
+    // Validate input
+    const validationResult = productsRequestSchema.safeParse(body);
+    if (!validationResult.success) {
+      console.error('❌ Validation error:', validationResult.error.errors);
       return new Response(
         JSON.stringify({ 
-          error: 'Token de acesso é obrigatório. Reconecte-se ao Mercado Livre.',
-          code: 'MISSING_TOKEN'
+          error: 'Dados inválidos',
+          code: 'VALIDATION_ERROR',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    const { accessToken, limit, offset } = validationResult.data;
 
     console.log(`🔄 Buscando informações do usuário... (limit: ${limit}, offset: ${offset})`)
 

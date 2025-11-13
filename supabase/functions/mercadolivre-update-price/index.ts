@@ -1,15 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface UpdatePriceRequest {
-  productId: string;
-  newPrice: number;
-  accessToken: string;
-}
+// Input validation schema
+const updatePriceSchema = z.object({
+  productId: z.string()
+    .min(1, "Product ID is required")
+    .regex(/^[A-Z]{3}\d+$/, "Invalid Mercado Livre product ID format"),
+  newPrice: z.number()
+    .positive("Price must be positive")
+    .max(999999, "Price cannot exceed 999,999"),
+  accessToken: z.string()
+    .min(10, "Invalid access token")
+});
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -20,14 +27,29 @@ serve(async (req) => {
   try {
     console.log('=== ATUALIZAÇÃO DE PREÇO MERCADO LIVRE ===');
     
-    const { productId, newPrice, accessToken }: UpdatePriceRequest = await req.json();
+    const body = await req.json();
+    
+    // Validate input
+    const validationResult = updatePriceSchema.safeParse(body);
+    if (!validationResult.success) {
+      console.error('❌ Validation error:', validationResult.error.errors);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Dados inválidos',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400 
+        }
+      );
+    }
+
+    const { productId, newPrice, accessToken } = validationResult.data;
     
     console.log('📦 Product ID:', productId);
     console.log('💰 Novo preço:', newPrice);
-
-    if (!productId || !newPrice || !accessToken) {
-      throw new Error('productId, newPrice e accessToken são obrigatórios');
-    }
 
     // Atualizar o preço no Mercado Livre
     const updateUrl = `https://api.mercadolibre.com/items/${productId}`;
