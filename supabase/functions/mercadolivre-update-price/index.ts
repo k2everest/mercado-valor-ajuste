@@ -48,8 +48,11 @@ serve(async (req) => {
 
     const { productId, newPrice, accessToken } = validationResult.data;
     
+    // Round to 2 decimal places to ensure ML API compliance
+    const roundedPrice = Math.round(newPrice * 100) / 100;
+    
     console.log('📦 Product ID:', productId);
-    console.log('💰 Novo preço:', newPrice);
+    console.log('💰 Novo preço:', roundedPrice);
 
     // Atualizar o preço no Mercado Livre
     const updateUrl = `https://api.mercadolibre.com/items/${productId}`;
@@ -64,7 +67,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        price: newPrice
+        price: roundedPrice
       })
     });
 
