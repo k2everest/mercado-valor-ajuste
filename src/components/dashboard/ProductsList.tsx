@@ -587,10 +587,13 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       for (const product of adjustedFreeShippingProducts) {
         try {
+          // Round to 2 decimal places to avoid ML API validation errors
+          const roundedPrice = Math.round(product.adjustedPrice! * 100) / 100;
+          
           const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
             body: {
               productId: product.id,
-              newPrice: product.adjustedPrice,
+              newPrice: roundedPrice,
               accessToken: accessToken
             }
           });
@@ -706,10 +709,13 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
 
       for (const product of selectedProductsList) {
         try {
+          // Round to 2 decimal places to avoid ML API validation errors
+          const roundedPrice = Math.round(product.adjustedPrice! * 100) / 100;
+          
           const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
             body: {
               productId: product.id,
-              newPrice: product.adjustedPrice,
+              newPrice: roundedPrice,
               accessToken: mlToken.access_token
             }
           });

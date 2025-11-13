@@ -103,12 +103,15 @@ export const ProductCard = memo(({
         throw new Error('Token do Mercado Livre não encontrado ou expirado. Reconecte sua conta.');
       }
       
-      console.log('📤 Enviando preço ajustado para o ML:', product.adjustedPrice);
+      // Round to 2 decimal places to avoid ML API validation errors
+      const roundedPrice = Math.round(product.adjustedPrice * 100) / 100;
+      
+      console.log('📤 Enviando preço ajustado para o ML:', roundedPrice);
       
       const { data, error } = await supabase.functions.invoke('mercadolivre-update-price', {
         body: {
           productId: product.id,
-          newPrice: product.adjustedPrice,
+          newPrice: roundedPrice,
           accessToken: accessToken
         }
       });
