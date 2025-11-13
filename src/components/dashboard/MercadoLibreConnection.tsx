@@ -211,8 +211,15 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
       const handleMessage = async (event: MessageEvent) => {
         console.log('📨 Mensagem recebida:', event.data, 'Origin:', event.origin);
         
-        // Aceitar mensagens de qualquer origin para evitar problemas de CORS
-        // if (event.origin !== window.location.origin) return;
+        // Validate origin for security
+        const allowedOrigins = [
+          window.location.origin,
+          'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
+        ];
+        if (!allowedOrigins.includes(event.origin)) {
+          console.warn('⚠️ Rejected message from unauthorized origin:', event.origin);
+          return;
+        }
 
         if (event.data.type === 'MERCADOLIVRE_AUTH_SUCCESS') {
           const { code, state: returnedState } = event.data;
