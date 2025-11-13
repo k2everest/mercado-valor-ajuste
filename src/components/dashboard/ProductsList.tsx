@@ -568,12 +568,13 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
     let errorCount = 0;
 
     try {
-      const mlTokenStr = localStorage.getItem('ml_token');
-      if (!mlTokenStr) {
-        throw new Error('Token do Mercado Livre não encontrado. Reconecte sua conta.');
+      // Get valid ML token (with auto-refresh)
+      const { getValidMLToken } = await import('@/utils/mlTokenManager');
+      const accessToken = await getValidMLToken();
+      
+      if (!accessToken) {
+        throw new Error('Token do Mercado Livre não encontrado ou expirado. Reconecte sua conta.');
       }
-
-      const mlToken = JSON.parse(mlTokenStr);
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -590,7 +591,7 @@ export const ProductsList = ({ products: initialProducts, pagination, onLoadMore
             body: {
               productId: product.id,
               newPrice: product.adjustedPrice,
-              accessToken: mlToken.access_token
+              accessToken: accessToken
             }
           });
 

@@ -95,13 +95,13 @@ export const ProductCard = memo(({
 
     setIsUpdatingPrice(true);
     try {
-      // Get ML token from localStorage
-      const mlTokenStr = localStorage.getItem('ml_token');
-      if (!mlTokenStr) {
-        throw new Error('Token do Mercado Livre não encontrado. Reconecte sua conta.');
+      // Get valid ML token (with auto-refresh)
+      const { getValidMLToken } = await import('@/utils/mlTokenManager');
+      const accessToken = await getValidMLToken();
+      
+      if (!accessToken) {
+        throw new Error('Token do Mercado Livre não encontrado ou expirado. Reconecte sua conta.');
       }
-
-      const mlToken = JSON.parse(mlTokenStr);
       
       console.log('📤 Enviando preço ajustado para o ML:', product.adjustedPrice);
       
@@ -109,7 +109,7 @@ export const ProductCard = memo(({
         body: {
           productId: product.id,
           newPrice: product.adjustedPrice,
-          accessToken: mlToken.access_token
+          accessToken: accessToken
         }
       });
 
