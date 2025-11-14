@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { TestTube, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getValidMLToken } from "@/utils/mlTokenManager";
 
 export const ApiTestPanel = () => {
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,7 @@ export const ApiTestPanel = () => {
     setResult(null);
 
     try {
-      const accessToken = localStorage.getItem('ml_access_token');
+      const accessToken = await getValidMLToken();
       if (!accessToken) {
         throw new Error('Token de acesso não encontrado. Conecte-se ao Mercado Livre primeiro.');
       }
