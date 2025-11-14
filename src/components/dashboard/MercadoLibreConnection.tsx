@@ -263,7 +263,7 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
             // Carregar produtos automaticamente
             try {
               console.log('📦 Carregando produtos automaticamente...');
-              await loadProducts('50'); // Carregar 50 produtos iniciais
+              await loadProducts(tokenData.access_token);
             } catch (productError) {
               console.error('⚠️ Erro ao carregar produtos iniciais:', productError);
               // Não falhar a conexão por causa disso
