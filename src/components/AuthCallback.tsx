@@ -11,6 +11,9 @@ const AuthCallback = () => {
       const code = urlParams.get('code');
       const state = urlParams.get('state');
       const error = urlParams.get('error');
+      
+      // Get safe target origin for postMessage
+      const targetOrigin = window.opener?.origin || window.location.origin;
 
       console.log('🔍 Parâmetros recebidos:', { code: !!code, state: !!state, error });
 
@@ -22,7 +25,7 @@ const AuthCallback = () => {
           window.opener.postMessage({
             type: 'MERCADOLIVRE_AUTH_ERROR',
             error: error
-          }, '*');
+          }, targetOrigin);
         }
         
         setTimeout(() => {
@@ -41,7 +44,7 @@ const AuthCallback = () => {
             type: 'MERCADOLIVRE_AUTH_SUCCESS',
             code: code,
             state: state
-          }, '*');
+          }, targetOrigin);
         } else {
           console.warn('⚠️ window.opener não encontrado');
         }
@@ -58,7 +61,7 @@ const AuthCallback = () => {
           window.opener.postMessage({
             type: 'MERCADOLIVRE_AUTH_ERROR',
             error: errorMsg
-          }, '*');
+          }, targetOrigin);
         }
         
         setTimeout(() => {
@@ -68,11 +71,13 @@ const AuthCallback = () => {
     } catch (err: any) {
       console.error('❌ Erro no callback:', err);
       
+      const targetOrigin = window.opener?.origin || window.location.origin;
+      
       if (window.opener) {
         window.opener.postMessage({
           type: 'MERCADOLIVRE_AUTH_ERROR',
           error: err.message
-        }, '*');
+        }, targetOrigin);
       }
       
       setTimeout(() => {

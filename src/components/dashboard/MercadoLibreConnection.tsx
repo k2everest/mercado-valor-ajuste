@@ -212,10 +212,8 @@ export const MercadoLibreConnection = ({ onConnectionChange, onConnect }: Mercad
         console.log('📨 Mensagem recebida:', event.data, 'Origin:', event.origin);
         
         // Validate origin for security
-        const allowedOrigins = [
-          window.location.origin,
-          'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
-        ];
+        const currentOrigin = window.location.origin;
+        const allowedOrigins = [currentOrigin];
         if (!allowedOrigins.includes(event.origin)) {
           console.warn('⚠️ Rejected message from unauthorized origin:', event.origin);
           return;

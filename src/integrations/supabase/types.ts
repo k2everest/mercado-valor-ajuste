@@ -136,6 +136,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ml_credentials: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          expires_at: string
+          refresh_token: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          expires_at: string
+          refresh_token: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          expires_at?: string
+          refresh_token?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       nfe_imports: {
         Row: {
           created_at: string
@@ -417,21 +444,18 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
-          email: string | null
           full_name: string | null
           id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
-          email?: string | null
           full_name?: string | null
           id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
-          email?: string | null
           full_name?: string | null
           id?: string
           updated_at?: string
