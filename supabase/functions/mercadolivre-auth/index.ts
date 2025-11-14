@@ -54,8 +54,9 @@ serve(async (req) => {
 
       const { state } = validationResult.data;
       
-      // Use the current project domain
-      const REDIRECT_URI = "https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com/auth-callback"
+      // Get the origin from the request or use environment variable
+      const origin = req.headers.get('origin') || Deno.env.get('ML_REDIRECT_URI') || 'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
+      const REDIRECT_URI = `${origin}/auth-callback`
       console.log('Redirect URI:', REDIRECT_URI)
       
       const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`
@@ -84,7 +85,8 @@ serve(async (req) => {
       const { code } = validationResult.data;
       
       console.log('Exchanging code for token...')
-      const REDIRECT_URI = "https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com/auth-callback"
+      const origin = req.headers.get('origin') || Deno.env.get('ML_REDIRECT_URI') || 'https://98dcc5dd-bae0-4c6f-b7aa-a6204c765de1.lovableproject.com'
+      const REDIRECT_URI = `${origin}/auth-callback`
       
       // Exchange authorization code for access token
       const tokenResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
