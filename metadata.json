@@ -1,0 +1,8 @@
+{
+  "name": "Mercado Valor Ajuste",
+  "description": "Mercado Livre price and freight calculation and adjustment management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
