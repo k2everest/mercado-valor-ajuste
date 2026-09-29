@@ -68,7 +68,13 @@ export const ProductCard = memo(({
       title: "🔍 Debug realizado",
       description: `Informações do produto ${product.id} no console`,
     });
-  }, [product.id]);
+  }, [
+    product.freightMethod,
+    product.id,
+    product.originalPrice,
+    product.sellerFreightCost,
+    product.title,
+  ]);
 
   const clearProductCache = useCallback(() => {
     FreightDebugger.clearProductCache(product.id);
